@@ -430,6 +430,7 @@ void Vm::togglePauseMenu(){
         _graphics->clip();
         _graphics->camera();
         _graphics->color();
+		vm_poke(24364,0);
     }
     else{
         //restore old draw state
