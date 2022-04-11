@@ -40,3 +40,4 @@ platform/bittboy/FAKE08
 platform/miyoomini/FAKE08
 *.exe
 platform/windows/FAKE08.exe.stackdump
+source/carts.zip

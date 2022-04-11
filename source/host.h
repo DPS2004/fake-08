@@ -19,6 +19,7 @@ enum StretchOption {
   FourByThreeStretch
 };
 
+
 enum ResizekeyOption {
   NoResize,
   YesResize
@@ -44,6 +45,13 @@ enum BgColorOption {
   White
 };
 
+#if LOAD_PACK_INS
+enum PackinLoadOption {
+  Unloaded,
+  Loaded
+};
+#endif
+
 class Host {
     uint8_t currKDown;
     uint8_t currKHeld;
@@ -61,6 +69,10 @@ class Host {
 	ResizekeyOption resizekey = NoResize;
 	MenuStyleOption menustyle = Fancy;
 	BgColorOption bgcolor = Gray;
+	#if LOAD_PACK_INS
+    PackinLoadOption packinloaded = Unloaded;
+	#endif
+    StretchOption stretch = PixelPerfectStretch;
 	
     float scaleX = 1.0;
     float scaleY = 1.0;

@@ -5,6 +5,7 @@
 #include "logger.h"
 
 #define LOGGER_ENABLED true
+
 #define PRINT_TO_CONSOLE true
 
 FILE * m_file = nullptr;

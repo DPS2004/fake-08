@@ -25,6 +25,7 @@ std::string defaultIni =
 "kbmode = 0\n"
 "menustyle = 1\n"
 "bgcolor = 0\n";
+"packinloaded = 0\n"
 
 void Host::setUpPaletteColors(){
     _paletteColors[0] = COLOR_00;
@@ -73,45 +74,52 @@ Color* Host::GetPaletteColors(){
 void Host::unpackCarts(){
 	
 	#if LOAD_PACK_INS
-	
-	Logger_Write("unzipping pack in carts to p8carts\n");
-	
-	//based on https://github.com/richgel999/miniz/issues/38
-	
-	mz_zip_archive zip_archive;
-	memset(&zip_archive, 0, sizeof(zip_archive));
 
-	// init zip file
-	mz_zip_reader_init_mem(&zip_archive, source_carts_zip, source_carts_zip_len, 0);
-	
-	int fileCount = (int)mz_zip_reader_get_num_files(&zip_archive);
-	if (fileCount == 0)
-	{
+	if(packinloaded == Unloaded){
+		Logger_Write("unzipping pack in carts to p8carts\n");
+		
+		//based on https://github.com/richgel999/miniz/issues/38
+		
+		mz_zip_archive zip_archive;
+		memset(&zip_archive, 0, sizeof(zip_archive));
+
+		// init zip file
+		mz_zip_reader_init_mem(&zip_archive, source_carts_zip, source_carts_zip_len, 0);
+		
+		int fileCount = (int)mz_zip_reader_get_num_files(&zip_archive);
+		if (fileCount == 0)
+		{
+			mz_zip_reader_end(&zip_archive);
+		}
+		mz_zip_archive_file_stat file_stat;
+		if (!mz_zip_reader_file_stat(&zip_archive, 0, &file_stat)) 
+		{
+			mz_zip_reader_end(&zip_archive);
+		}
+		// Get root folder
+		string base = _cartDirectory; // path delim on end
+
+		// Get and print information about each file in the archive.
+		for (int i = 0; i < fileCount; i++)
+		{
+			if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat)) continue;
+			if (mz_zip_reader_is_file_a_directory(&zip_archive, i)) continue; // skip directories for now
+			string fileName = base + file_stat.m_filename; // make path relative
+			Logger_Write(fileName.c_str());
+			Logger_Write("\n");
+			string destFile = fileName; // make full dest path
+
+			mz_zip_reader_extract_to_file(&zip_archive, i, destFile.c_str(), 0);
+		}
+
+		// Close the archive, freeing any resources it was using
 		mz_zip_reader_end(&zip_archive);
+		
+		packinloaded = Loaded;
+		
+	}else{
+		Logger_Write("packins already loaded\n");
 	}
-	mz_zip_archive_file_stat file_stat;
-	if (!mz_zip_reader_file_stat(&zip_archive, 0, &file_stat)) 
-	{
-		mz_zip_reader_end(&zip_archive);
-	}
-	// Get root folder
-	string base = _cartDirectory; // path delim on end
-
-	// Get and print information about each file in the archive.
-	for (int i = 0; i < fileCount; i++)
-	{
-		if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat)) continue;
-		if (mz_zip_reader_is_file_a_directory(&zip_archive, i)) continue; // skip directories for now
-		string fileName = base + file_stat.m_filename; // make path relative
-		Logger_Write(fileName.c_str());
-		Logger_Write("\n");
-		string destFile = fileName; // make full dest path
-
-		mz_zip_reader_extract_to_file(&zip_archive, i, destFile.c_str(), 0);
-	}
-
-	// Close the archive, freeing any resources it was using
-	mz_zip_reader_end(&zip_archive);
 	
 	#endif
 	
@@ -134,6 +142,7 @@ void Host::loadSettingsIni(){
         stretch = (StretchOption) stretchSetting;
     }
 	
+
 	//resize hotkey
 	long resizekeySetting = settingsIni.GetLongValue("settings", "resizekey", (long)NoResize);
 	resizekey = (ResizekeyOption) resizekeySetting;
@@ -148,7 +157,11 @@ void Host::loadSettingsIni(){
 	
 	//bgcolor
 	long bgcolorSetting = settingsIni.GetLongValue("settings", "bgcolor", (long)Gray);
-	bgcolor = (BgColorOption) bgcolorSetting;
+	
+	#if LOAD_PACK_INS
+	long packinloadedSetting = settingsIni.GetLongValue("settings", "packinloaded", (long)Unloaded);
+	packinloaded = (PackinLoadOption) packinloadedSetting;
+	#endif
 }
 
 void Host::saveSettingsIni(){
@@ -159,7 +172,9 @@ void Host::saveSettingsIni(){
     settingsIni.SetLongValue("settings", "kbmode", kbmode);
     settingsIni.SetLongValue("settings", "menustyle", menustyle);
     settingsIni.SetLongValue("settings", "bgcolor", bgcolor);
-	
+	#if LOAD_PACK_INS
+    settingsIni.SetLongValue("settings", "packinloaded", packinloaded);
+	#endif
     std::string settingsIniStr = "";
     settingsIni.Save(settingsIniStr, false);
 

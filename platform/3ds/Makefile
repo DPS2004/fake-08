@@ -72,8 +72,8 @@ CFLAGS	:=	-g -Wall -Ofast -mword-relocations \
 
 CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS -DVER_STR=\"$(APP_VERSION)\"
 
-# enable pack in games with this platform
-CFLAGS  +=  -DLOAD_PACK_INS
+
+# CFLAGS  +=  -DLOAD_PACK_INS
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fexceptions -std=gnu++17
 
@@ -220,6 +220,7 @@ $(TARGET)-cia.bnr: banner/$(TARGET).cgfx banner/$(TARGET).wav
 #---------------------------------------------------------------------------------
 $(TARGET)-cia.smdh: banner/$(TARGET)-icon.png 
 	@bannertool makesmdh -s "$(TARGET)" -l "$(APP_TITLE)" -p "$(APP_AUTHOR)" -i banner/$(TARGET)-icon.png -o $(TARGET)-cia.smdh -r regionfree
+
 #---------------------------------------------------------------------------------
 cia: $(TARGET)-strip.elf $(TARGET)-cia.bnr $(TARGET)-cia.smdh banner/$(TARGET).rsf
 	@makerom -f cia -elf $(TARGET)-strip.elf -icon $(TARGET)-cia.smdh -banner $(TARGET)-cia.bnr -desc app:4 -v -o $(TARGET).cia -target t -exefslogo -rsf banner/$(TARGET).rsf \
