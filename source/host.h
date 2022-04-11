@@ -72,7 +72,6 @@ class Host {
 	#if LOAD_PACK_INS
     PackinLoadOption packinloaded = Unloaded;
 	#endif
-    StretchOption stretch = PixelPerfectStretch;
 	
     float scaleX = 1.0;
     float scaleY = 1.0;

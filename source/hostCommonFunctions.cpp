@@ -24,8 +24,7 @@ std::string defaultIni =
 "resizekey = 0\n"
 "kbmode = 0\n"
 "menustyle = 1\n"
-"bgcolor = 0\n";
-"packinloaded = 0\n"
+"packinloaded = 0\n";
 
 void Host::setUpPaletteColors(){
     _paletteColors[0] = COLOR_00;
@@ -157,6 +156,7 @@ void Host::loadSettingsIni(){
 	
 	//bgcolor
 	long bgcolorSetting = settingsIni.GetLongValue("settings", "bgcolor", (long)Gray);
+	bgcolor = (BgColorOption) bgcolorSetting;
 	
 	#if LOAD_PACK_INS
 	long packinloadedSetting = settingsIni.GetLongValue("settings", "packinloaded", (long)Unloaded);
