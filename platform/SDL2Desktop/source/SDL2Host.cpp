@@ -17,6 +17,8 @@ using namespace std;
 #include "../../../source/filehelpers.h"
 #include "../../../source/logger.h"
 
+#include "../../../source/emojiconversion.h"
+
 // sdl
 #include <SDL2/SDL.h>
 
@@ -27,6 +29,8 @@ using namespace std;
 
 #define RENDERER_FLAGS SDL_RENDERER_ACCELERATED
 #define PIXEL_FORMAT SDL_PIXELFORMAT_ARGB8888
+
+#define KB_ENABLED true
 
 SDL_Event event;
 
@@ -52,6 +56,10 @@ Host::Host()
     if (res == 0 && stat(cartdatadir.c_str(), &st) == -1) {
         res = mkdir(cartdatadir.c_str(), 0777);
     }
+	
+	#if KB_ENABLED
+	SDL_StartTextInput();
+	#endif 
 
     std::string home = getenv("HOME");
     
@@ -75,12 +83,40 @@ InputState_t Host::scanInput(){
     currKHeld = 0;
     stretchKeyPressed = false;
 
+    currKBDown = false;
+	currKBKey = "";
+
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
+			
+			#if KB_ENABLED
+			case SDL_TEXTINPUT:
+				//Logger_Write( charset::upper_to_emoji(event.text.text).c_str() );
+				//Logger_Write("\n");
+				currKBKey = charset::upper_to_emoji(event.text.text);
+				currKBDown = true;
+				
+				break;
+			#endif
+			
+			
             case SDL_KEYDOWN:
+			
+				#if KB_ENABLED
+				switch (event.key.keysym.scancode)
+				{
+					case SDL_SCANCODE_BACKSPACE: currKBDown = true; currKBKey = "\b"; break;
+					case SDL_SCANCODE_RETURN: currKBDown = true; currKBKey = "\r"; break;
+					case SDL_SCANCODE_ESCAPE: currKBDown = true; currKBKey = "\27"; break;
+					case SDL_SCANCODE_TAB: currKBDown = true; currKBKey = "\t"; break;
+					default : break;
+				}
+				#endif
+				
                 switch (event.key.keysym.sym)
                 {
-                    case SDLK_ESCAPE:currKDown |= P8_KEY_PAUSE; break;
+                    case SDLK_ESCAPE:case SDLK_RETURN:case SDLK_RETURN2:
+                                     currKDown |= P8_KEY_PAUSE; break;
                     case SDLK_LEFT:  currKDown |= P8_KEY_LEFT; break;
                     case SDLK_RIGHT: currKDown |= P8_KEY_RIGHT; break;
                     case SDLK_UP:    currKDown |= P8_KEY_UP; break;
@@ -120,6 +156,15 @@ InputState_t Host::scanInput(){
     const Uint8* keystate = SDL_GetKeyboardState(NULL);
 
     //continuous-response keys
+    if(keystate[SDL_SCANCODE_ESCAPE]){
+        currKHeld |= P8_KEY_PAUSE;
+    }
+    if(keystate[SDL_SCANCODE_RETURN]){
+        currKHeld |= P8_KEY_PAUSE;
+    }
+    if(keystate[SDL_SCANCODE_RETURN2]){
+        currKHeld |= P8_KEY_PAUSE;
+    }
     if(keystate[SDL_SCANCODE_LEFT]){
         currKHeld |= P8_KEY_LEFT;
     }
@@ -147,7 +192,9 @@ InputState_t Host::scanInput(){
         currKHeld,
         (int16_t)mouseX,
         (int16_t)mouseY,
-        picoMouseState
+        picoMouseState,
+		currKBDown,
+		currKBKey
     };
 }
 

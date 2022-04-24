@@ -8,23 +8,30 @@
 #---------------------------------------------------------------------------------
 TARGET		:=	FAKE08
 BUILD		:=	build
-SOURCES		:=	${SOURCES} ../SDL2Common/source source
+SOURCES		:=	${SOURCES} ../gcw0/source source
 INCLUDES	:=	${INCLUDES}
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-CC = $(CXX)
 
-CFLAGS	:=	-g -Wall -Wno-deprecated -ffunction-sections -std=c++17 \
-			$(DEFINES)
+ifeq ($(GKD), 1)
+CC = /opt/gcw0-toolchain-static/bin/mipsel-linux-g++
+CXX = /opt/gcw0-toolchain-static/bin/mipsel-linux-g++
+CFLAGS	:= -Wall -Ofast -fdata-sections -ffunction-sections -fno-PIC -mno-shared -mno-abicalls -fno-PIC -flto -DVER_STR=\"$(APP_VERSION)\" $(DEFINES) -DGKD
 
-CFLAGS	+=	$(INCLUDE) -DVER_STR=\"$(APP_VERSION)\"
+else
+CC = /opt/gcw0-toolchain/bin/mipsel-linux-g++
+CXX = /opt/gcw0-toolchain/bin/mipsel-linux-g++
+CFLAGS	:= -Wall -Ofast -fdata-sections -ffunction-sections -fno-PIC -mno-shared -mplt -flto -DVER_STR=\"$(APP_VERSION)\" $(DEFINES) -D_GCW0
+endif
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions 
-#-std=gnu++11 was used before... not sure of difference
 
-LIBS	:= -lSDL2
+CFLAGS	+=	$(INCLUDE)
+
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -std=gnu++17
+
+LIBS	:= $(CFLAGS) -lc -lgcc -lm -lSDL -lasound -Wl,--as-needed,--gc-sections -s
 
 LDFLAGS	:= $(LIBS)
 

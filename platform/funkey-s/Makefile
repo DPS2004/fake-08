@@ -8,23 +8,23 @@
 #---------------------------------------------------------------------------------
 TARGET		:=	FAKE08
 BUILD		:=	build
-SOURCES		:=	${SOURCES} ../SDL2Common/source source
+SOURCES		:=	${SOURCES} ../funkey-s/source source
 INCLUDES	:=	${INCLUDES}
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-CC = $(CXX)
+CC = /opt/funkey-toolchain-shared/bin/arm-linux-g++
+CXX = /opt/funkey-toolchain-shared/bin/arm-linux-g++
 
-CFLAGS	:=	-g -Wall -Wno-deprecated -ffunction-sections -std=c++17 \
+CFLAGS	:= -Wall -Ofast -fno-PIC -ffunction-sections -flto -DVER_STR=\"$(APP_VERSION)\" \
 			$(DEFINES)
 
-CFLAGS	+=	$(INCLUDE) -DVER_STR=\"$(APP_VERSION)\"
+CFLAGS	+=	$(INCLUDE)
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions 
-#-std=gnu++11 was used before... not sure of difference
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -std=gnu++17
 
-LIBS	:= -lSDL2
+LIBS	:= $(CFLAGS) -lc -lgcc -lm -lSDL -lasound -Wl,--as-needed,--gc-sections -s -no-pie
 
 LDFLAGS	:= $(LIBS)
 

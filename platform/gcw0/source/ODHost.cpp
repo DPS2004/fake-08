@@ -1,11 +1,11 @@
 
 #include <stdio.h>
-#include <unistd.h>
 #include <string.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
 
 #include <fstream>
 #include <iostream>
@@ -17,22 +17,15 @@ using namespace std;
 #include "../../../source/logger.h"
 #include "../../../source/filehelpers.h"
 
-#ifndef _DESKTOP
-#include "ao.h"
-#endif
-
 // sdl
 #include <SDL/SDL.h>
 
 #define SCREEN_SIZE_X 640
 #define SCREEN_SIZE_Y 480
 
-#define SCREEN_BPP 32
-
+#define SCREEN_BPP 16
 
 #define SAMPLERATE 22050
-#define SAMPLESPERBUF (SAMPLERATE / 30)
-#define NUM_BUFFERS 2
 
 const int __screenWidth = SCREEN_SIZE_X;
 const int __screenHeight = SCREEN_SIZE_Y;
@@ -68,7 +61,7 @@ SDL_Surface *texture;
 SDL_bool done = SDL_FALSE;
 SDL_AudioSpec want, have;
 void *pixels;
-uint32_t *base;
+uint16_t *base;
 int pitch;
 
 SDL_Rect SrcR;
@@ -81,32 +74,30 @@ int drawModeScaleY = 1;
 
 bool audioInitialized = false;
 
-uint32_t _mapped32BitColors[144];
+uint16_t _mapped16BitColors[144];
+
+/*
+ * Gameblabla 
+ * Well unfortunately we still have IPU bugs/issues due to how the IPU scaler works.
+ * So for now, we have to use a simple software scaler. (A performance penalty may occur on the RG-300X/RG-350M)
+*/
+//#define OPENDINGUX_IPU 1
 
 
 void postFlipFunction(){
     // We're done rendering, so we end the frame here.
-
-    SDL_SoftStretch(texture, &SrcR, window, &DestR);
-
+#ifdef OPENDINGUX_IPU
     SDL_Flip(window);
+#else
+    SDL_SoftStretch(texture, &SrcR, window, &DestR);
+    SDL_Flip(window);
+#endif
 }
 
 void audioCleanup(){
-    #ifdef _DESKTOP
-    SDL_PauseAudio(1);
-
     audioInitialized = false;
 
     SDL_CloseAudio();
-
-    #else
-    AO_PauseAudio(1);
-
-    audioInitialized = false;
-
-    AO_CloseAudio();
-    #endif
 }
 
 
@@ -120,12 +111,12 @@ void audioSetup(){
 
     SDL_memset(&want, 0, sizeof(want));
     want.freq = SAMPLERATE;
-    want.format = AUDIO_S16LSB;
+    want.format = AUDIO_S16SYS;
     want.channels = 1;
-    want.samples = 512;
+    want.samples = 1024;
     want.callback = FillAudioDeviceBuffer;
+    
 
-    #ifdef _DESKTOP
     int audioOpenRes = SDL_OpenAudio(&want, &have);
     if (audioOpenRes < 0) {
         Logger_Write("Failed to open audio: %s", SDL_GetError());
@@ -136,11 +127,6 @@ void audioSetup(){
         SDL_PauseAudio(0); 
         audioInitialized = true;
     }
-    #else
-    AO_OpenAudio(&want);
-    AO_PauseAudio(0);
-    audioInitialized = true;
-    #endif
 }
 
 void _setSourceRect(int xoffset, int yoffset) {
@@ -204,15 +190,15 @@ void _changeStretch(StretchOption newStretch){
 
 
 Host::Host() {
-    #ifdef _DESKTOP
+    #ifdef _GCW0
+    _cartDirectory = "/media/sdcard/roms/PICO8";
+    _logFilePrefix = "/media/sdcard/roms/PICO8/";
+    #else
     std::string home = getenv("HOME");
     
     _cartDirectory = home + "/p8carts";
     _logFilePrefix = home + "/fake08";
-
-    #else
-    _cartDirectory = "/mnt/SDCARD/Roms/PICO";
-	_logFilePrefix = "/mnt/SDCARD/Roms/PICO/";
+    #endif
 
     struct stat st = {0};
     int res = 0;
@@ -221,12 +207,6 @@ Host::Host() {
     if (stat(cartdatadir.c_str(), &st) == -1) {
         res = mkdir(cartdatadir.c_str(), 0777);
     }
-
-    if (res != 0){
-        Logger_Write("error creating cdata directory. Cart data will not save.\n");
-    }
-    #endif
-
  }
 
 void Host::oneTimeSetup(Audio* audio){
@@ -239,11 +219,15 @@ void Host::oneTimeSetup(Audio* audio){
     SDL_WM_SetCaption("FAKE-08", NULL);
     SDL_ShowCursor(SDL_DISABLE);
 
-    int flags = SDL_SWSURFACE;
+    int flags = SDL_HWSURFACE;
 
+	#ifdef OPENDINGUX_IPU
+    window = SDL_SetVideoMode(128, 128, SCREEN_BPP, flags);
+    #else
+    //todo: 0, 0 video mode, then check later to get actual resolution. handle 320x240 and 640x40
     window = SDL_SetVideoMode(SCREEN_SIZE_X, SCREEN_SIZE_Y, SCREEN_BPP, flags);
-
     texture = SDL_CreateRGBSurface(flags, PicoScreenWidth, PicoScreenHeight, SCREEN_BPP, 0, 0, 0, 0);
+    #endif
 
     _audio = audio;
     audioSetup();
@@ -256,12 +240,16 @@ void Host::oneTimeSetup(Audio* audio){
     SDL_PixelFormat *f = window->format;
 
     for(int i = 0; i < 144; i++){
-        _mapped32BitColors[i] = SDL_MapRGB(f, _paletteColors[i].Red, _paletteColors[i].Green, _paletteColors[i].Blue);
+        _mapped16BitColors[i] = SDL_MapRGB(f, _paletteColors[i].Red, _paletteColors[i].Green, _paletteColors[i].Blue);
     }
 
+    const SDL_VideoInfo* info = SDL_GetVideoInfo();
+    _windowWidth = info->current_w;
+    _windowHeight = info->current_h;
 
-    _windowWidth = SCREEN_SIZE_X;
-    _windowHeight = SCREEN_SIZE_Y;
+    if (_windowWidth < _maxNoStretchWidth || _windowHeight < _maxNoStretchHeight){
+        _maxNoStretchWidth = _maxNoStretchHeight = 128;
+    }
 
     //TODO: store in settings INI
     stretch = StretchToFill;
@@ -290,7 +278,7 @@ void Host::setTargetFps(int targetFps){
 }
 
 void Host::changeStretch(){
-    if (stretchKeyPressed && resizekey == YesResize) {
+    if (stretchKeyPressed) {
         StretchOption newStretch = stretch;
 
         if (stretch == PixelPerfectStretch) {
@@ -318,14 +306,6 @@ void Host::changeStretch(){
         mouseOffsetY = DestR.y;
     }
 }
-void Host::forceStretch(StretchOption newStretch) {
-	_changeStretch(newStretch);
-	stretch = newStretch;
-	scaleX = _screenWidth / (float)PicoScreenWidth;
-	scaleY = _screenHeight / (float)PicoScreenHeight;
-	mouseOffsetX = DestR.x;
-	mouseOffsetY = DestR.y;
-}
 
 InputState_t Host::scanInput(){
     currKDown = 0;
@@ -346,11 +326,24 @@ InputState_t Host::scanInput(){
                     case SDLK_LSHIFT:currKDown |= P8_KEY_O; break;
                     case SDLK_LALT:  currKDown |= P8_KEY_X; break;
                     case SDLK_LCTRL: currKDown |= P8_KEY_O; break;
-                    case SDLK_ESCAPE: done = SDL_TRUE; break;
-                    case SDLK_RCTRL: stretchKeyPressed = true; break;
+                    case SDLK_HOME: done = SDL_TRUE; break;
+                    case SDLK_ESCAPE: stretchKeyPressed = true; break;
                     default: break;
                 }
                 break;
+            case SDL_KEYUP:
+                switch (event.key.keysym.sym)
+                {
+                    case SDLK_HOME:
+                    #ifdef GKD
+                    case SDLK_TAB:
+                    #endif
+						done = SDL_TRUE;
+                    break;
+                    default: break;
+                }
+                break;
+            break;
             case SDL_QUIT:
                 done = SDL_TRUE;
                 break;
@@ -426,7 +419,10 @@ void set_pixel(SDL_Surface *surface, int x, int y, uint16_t pixel)
 */
 
 void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMode){
-    drawModeScaleX = 1;
+    #ifdef OPENDINGUX_IPU
+    pixels = window->pixels;
+    #else
+	drawModeScaleX = 1;
     drawModeScaleY = 1;
     switch(drawMode){
         case 1:
@@ -488,9 +484,9 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + ( y * PicoScreenHeight + (127 - x));
+                base = ((uint16_t *)pixels) + ( y * PicoScreenHeight + (127 - x));
                 base[0] = col;
             }
         }
@@ -500,9 +496,9 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + ((127 - y) * PicoScreenHeight + x);
+                base = ((uint16_t *)pixels) + ((127 - y) * PicoScreenHeight + x);
                 base[0] = col;
             }
         }
@@ -512,9 +508,9 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + ((127 - y) * PicoScreenHeight + (127 - x));
+                base = ((uint16_t *)pixels) + ((127 - y) * PicoScreenHeight + (127 - x));
                 base[0] = col;
             }
         }
@@ -524,9 +520,9 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + (x * PicoScreenHeight + (127 - y));
+                base = ((uint16_t *)pixels) + (x * PicoScreenHeight + (127 - y));
                 base[0] = col;
             }
         }
@@ -536,9 +532,9 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + ((127 - y) * PicoScreenHeight + (127 - x));
+                base = ((uint16_t *)pixels) + ((127 - y) * PicoScreenHeight + (127 - x));
                 base[0] = col;
             }
         }
@@ -548,28 +544,63 @@ void Host::drawFrame(uint8_t* picoFb, uint8_t* screenPaletteMap, uint8_t drawMod
         for (int y = 0; y < PicoScreenHeight; y ++){
             for (int x = 0; x < PicoScreenWidth; x ++){
                 uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+                uint16_t col = _mapped16BitColors[screenPaletteMap[c]];
 
-                base = ((uint32_t *)pixels) + ((127 - x) * PicoScreenHeight + y);
+                base = ((uint16_t *)pixels) + ((127 - x) * PicoScreenHeight + y);
                 base[0] = col;
             }
         }
     }
     else { //default
         for (int y = 0; y < PicoScreenHeight; y ++){
-            for (int x = 0; x < PicoScreenWidth; x ++){
-                uint8_t c = getPixelNibble(x, y, picoFb);
-                uint32_t col = _mapped32BitColors[screenPaletteMap[c]];
+            for (int x = 0; x < pixelBlocksPerLine; x ++){
+                int32_t eightPix = ((int32_t*)picoFb)[y * pixelBlocksPerLine + x];
 
-                #ifdef _DESKTOP
-                base = ((uint32_t *)pixels) + (y * PicoScreenHeight + x);
-                #else
-                base = ((uint32_t *)pixels) + ((127 - y) * PicoScreenHeight + (127 - x));
-                #endif
-                base[0] = col;
+                int h = (eightPix >> 28) & 0x0f;
+                int g = (eightPix >> 24) & 0x0f;
+                int f = (eightPix >> 20) & 0x0f;
+                int e = (eightPix >> 16) & 0x0f;
+                int d = (eightPix >> 12) & 0x0f;
+                int c = (eightPix >>  8) & 0x0f;
+                int b = (eightPix >>  4) & 0x0f;
+                int a = (eightPix)       & 0x0f;
+
+                int32_t cola = _mapped16BitColors[screenPaletteMap[a]];
+                int32_t colb = _mapped16BitColors[screenPaletteMap[b]];
+                int32_t colc = _mapped16BitColors[screenPaletteMap[c]];
+                int32_t cold = _mapped16BitColors[screenPaletteMap[d]];
+                int32_t cole = _mapped16BitColors[screenPaletteMap[e]];
+                int32_t colf = _mapped16BitColors[screenPaletteMap[f]];
+                int32_t colg = _mapped16BitColors[screenPaletteMap[g]];
+                int32_t colh = _mapped16BitColors[screenPaletteMap[h]];
+
+                
+                base = ((uint16_t *)pixels + (y * PicoScreenHeight + x * 8));
+                base[0] = cola;
+                base[1] = colb;
+                base[2] = colc;
+                base[3] = cold;
+                base[4] = cole;
+                base[5] = colf;
+                base[6] = colg;
+                base[7] = colh;
+                
+
+                //----OR something like this for further optimization?
+                //not exactly this. its broken
+                /*
+                int32_t* base32 = ((int32_t *)pixels + (y * PicoScreenHeight + x * 8));
+                base32[0] = cola << 16 & colb;
+                base32[1] = colc << 16 & cold;
+                base32[2] = cole << 16 & colf;
+                base32[3] = colg << 16 & colh;
+                */
+                
+                
             }
         }
     }
+    #endif
 
     postFlipFunction();
 }
@@ -624,10 +655,10 @@ const char* Host::logFilePrefix() {
 }
 
 std::string Host::customBiosLua() {
-    return "cartpath = \"roms/pico/\"\n"
+    return "cartpath = \"roms/PICO8/\"\n"
         "selectbtn = \"a\"\n"
         "pausebtn = \"start\""
-        "exitbtn = \"menu\""
+        "exitbtn = \"power\""
         "sizebtn = \"select\"";
 }
 

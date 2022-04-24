@@ -3,6 +3,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <fstream>
 #include <iostream>
@@ -137,12 +139,16 @@ void _changeStretch(StretchOption newStretch){
         _screenWidth = PicoScreenWidth;
         _screenHeight = PicoScreenHeight;
     }
+    else if (newStretch == StretchToFit) {
+        _screenWidth = _windowHeight;
+        _screenHeight = _windowHeight;
+    }
     else if (newStretch == StretchAndOverflow) {
         yoffset = 4 / drawModeScaleY;
         _screenWidth = PicoScreenWidth * 2;
         _screenHeight = _windowHeight;
     }
-    //default to StretchToFill)
+    //default to StretchToFill
     else {
         _screenWidth = _windowWidth;
         _screenHeight = _windowHeight; 
@@ -177,6 +183,14 @@ Host::Host() {
     _logFilePrefix = home + "/fake08";
 
     #endif
+
+    struct stat st = {0};
+    int res = 0;
+
+    string cartdatadir = _logFilePrefix + "cdata";
+    if (stat(cartdatadir.c_str(), &st) == -1) {
+        res = mkdir(cartdatadir.c_str(), 0777);
+    }
  }
 
 void Host::oneTimeSetup(Audio* audio){
@@ -247,6 +261,9 @@ void Host::changeStretch(){
             newStretch = PixelPerfect;
         }
         else if (stretch == PixelPerfect) {
+            newStretch = StretchToFit;
+        }
+        else if (stretch == StretchToFit) {
             newStretch = StretchToFill;
         }
         else{

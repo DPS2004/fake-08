@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string>
 
+#include <string>
+
 /// Creates a bitmask from a bit number.
 #define BITMASK(n) (1U<<(n))
 
