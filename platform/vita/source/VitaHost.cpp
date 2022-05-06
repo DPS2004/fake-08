@@ -20,6 +20,7 @@ using namespace std;
 #include <psp2/kernel/processmgr.h>
 #include <psp2/io/fcntl.h>
 #include <psp2/power.h>
+#include <psp2/io/stat.h> 
 
 // sdl
 #include <SDL2/SDL.h>
