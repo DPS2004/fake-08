@@ -21,10 +21,10 @@ CSimpleIniA settingsIni;
 std::string defaultIni =
 "[settings]\n"
 "stretch = 1\n"
-"resizekey = 0\n"
+"resizekey = 1\n"
 "kbmode = 0\n"
 "menustyle = 1\n"
-"packinloaded = 0\n";
+"bgcolor = 0\n";
 
 void Host::setUpPaletteColors(){
     _paletteColors[0] = COLOR_00;
@@ -71,9 +71,8 @@ Color* Host::GetPaletteColors(){
 }
 
 void Host::unpackCarts(){
-	
-	#if LOAD_PACK_INS
 
+	#if LOAD_PACK_INS
 	if(packinloaded == Unloaded){
 		Logger_Write("unzipping pack in carts to p8carts\n");
 		
@@ -130,7 +129,11 @@ void Host::loadSettingsIni(){
 	
 	//File does not exist, fill string with defaults
 	if(settingsIniStr.length() == 0 ){
-        settingsIniStr = defaultIni;
+		#if LOAD_PACK_INS
+        settingsIniStr = defaultIni + "packinloaded = 0\n";
+		#else
+		settingsIniStr = defaultIni;
+		#endif
 	}
 
     settingsIni.LoadData(settingsIniStr);
@@ -141,7 +144,11 @@ void Host::loadSettingsIni(){
         stretch = (StretchOption) stretchSetting;
     }
 	
-
+	#if LOAD_PACK_INS
+	long packinloadedSetting = settingsIni.GetLongValue("settings", "packinloaded", (long)Unloaded);
+	packinloaded = (PackinLoadOption) packinloadedSetting;
+	#endif
+	
 	//resize hotkey
 	long resizekeySetting = settingsIni.GetLongValue("settings", "resizekey", (long)NoResize);
 	resizekey = (ResizekeyOption) resizekeySetting;
@@ -157,24 +164,23 @@ void Host::loadSettingsIni(){
 	//bgcolor
 	long bgcolorSetting = settingsIni.GetLongValue("settings", "bgcolor", (long)Gray);
 	bgcolor = (BgColorOption) bgcolorSetting;
-	
-	#if LOAD_PACK_INS
-	long packinloadedSetting = settingsIni.GetLongValue("settings", "packinloaded", (long)Unloaded);
-	packinloaded = (PackinLoadOption) packinloadedSetting;
-	#endif
 }
 
 void Host::saveSettingsIni(){
     //write out settings to persist
 	
     settingsIni.SetLongValue("settings", "stretch", stretch);
-    settingsIni.SetLongValue("settings", "resizekey", resizekey);
-    settingsIni.SetLongValue("settings", "kbmode", kbmode);
-    settingsIni.SetLongValue("settings", "menustyle", menustyle);
-    settingsIni.SetLongValue("settings", "bgcolor", bgcolor);
+	
 	#if LOAD_PACK_INS
     settingsIni.SetLongValue("settings", "packinloaded", packinloaded);
 	#endif
+	
+    settingsIni.SetLongValue("settings", "resizekey", resizekey);
+	
+    settingsIni.SetLongValue("settings", "kbmode", kbmode);
+    settingsIni.SetLongValue("settings", "menustyle", menustyle);
+    settingsIni.SetLongValue("settings", "bgcolor", bgcolor);
+	
     std::string settingsIniStr = "";
     settingsIni.Save(settingsIniStr, false);
 
@@ -286,6 +292,13 @@ void Host::setSetting(std::string sname, int sval) {
 	}else if(sname == "bgcolor"){
 		Logger_Write("setting bgcolor\n");
 		bgcolor = (BgColorOption) sval;
+		
+	}else if(sname == "packinloaded"){
+		Logger_Write("setting packinloaded\n");
+		
+		#if LOAD_PACK_INS
+		packinloaded = (PackinLoadOption) sval;
+		#endif
 		
 	}else{
 		Logger_Write("Setting ");
