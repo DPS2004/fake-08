@@ -1,7 +1,16 @@
-
 #pragma once
 
 #include <stdio.h>
+
+#if __PLAYDATE__
+
+extern "C"
+{
+#include "pd_api.h"
+}
+void Logger_Initialize_Playdate(PlaydateAPI* playdate);
+
+#endif
 
 void Logger_Initialize(const char* pathPrefix);
 void Logger_Exit();

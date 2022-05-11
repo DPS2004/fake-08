@@ -23,23 +23,31 @@ endif
 VPATH +=
 
 # List C/C++ source files here
-SRC += source/pdnewlib.c source/link.cpp source/main.cpp
+
+
+
+SRC +=  source/main.cpp
+SRC +=  source/pdnewlib.c
+
+SRC +=  ../../source/vm.cpp
+SRC +=  ../../source/logger.cpp
 
 # List all user directories here
-UINCDIR +=
+UINCDIR += ../../source
+UINCDIR += ../../libs/z8lua
 
 # List all user C/C++ define here, like -D_DEBUG=1
-UDEFS +=
+UDEFS += -D__PLAYDATE__
 
 # Define ASM defines here
-UADEFS +=
+UADEFS += -D__PLAYDATE__
 
 # List the user directory to look for the libraries here
 ULIBDIR +=
 
 # List all user libraries here
-ULIBS +=
+ULIBS += 
 
 #CLANGFLAGS = -fsanitize=address
 
-include $(SDK)/C_API/buildsupport/common.mk
+include buildsupport/common.mk

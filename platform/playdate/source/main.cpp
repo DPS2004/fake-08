@@ -1,6 +1,17 @@
-#include <cstdlib>
-#include "pdnewlib.h"
 #include "stdio.h"
+#include <cstdlib>
+#include <string.h>
+#include <math.h>
+
+#include <string>
+
+
+#include "vm.h"
+#include "logger.h"
+#include "host.h"
+#include "hostVmShared.h"
+
+#include "pdnewlib.h"
 
 extern "C"
 {
@@ -15,8 +26,6 @@ int next(void) {return order++;}
 namespace
 {
     int O_ST = order++;
-    int O_STFN = next();
-    int O_LINK = next2();
     int O_INITSEC = 0;
     int O_CONSTRUC = 0;
     int O_STATICCON = 0;
@@ -41,11 +50,11 @@ int _main();
 int* a = (int*)malloc(sizeof(int));
 int* b = new int;
 
-extern void throw_exception(int);
-int excepttest()
-{
-    throw_exception(1);
-    return 2;
+
+
+int	updateLoop(void* userdata) {
+	//presumably, a lot of code goes here.
+	return 1;
 }
 
 extern "C"
@@ -55,17 +64,13 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg)
     
     if (event == kEventInit)
     {
-        O_MAIN = next2();
-    }
-    
-    if (event == kEventInitLua)
-    {
-        #define print playdate->system->logToConsole
+		
+		playdate->system->setUpdateCallback(updateLoop, 0);
+		
+		#define print playdate->system->logToConsole
         #define printO(X) print(#X ": %d\n", X)
-        print("LUA_INIT\n");
+        print("notLUA_INIT\n");
         printO(O_ST);
-        printO(O_STFN);
-        printO(O_LINK);
         printO(O_INITSEC);
         printO(O_CONSTRUC);
         printO(O_STATICCON);
@@ -73,11 +78,13 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg)
         
         printf("printf test\n");
         
-        #if TARGET_PLAYDATE
-        print("exception test: %d", excepttest());
-        #endif
         
         print("DONE!\n");
+		
+		Logger_Initialize_Playdate(playdate);
+		
+		Logger_Write("logger writing test \n");
+		
     }
     
     return 0;

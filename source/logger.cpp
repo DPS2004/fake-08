@@ -11,6 +11,23 @@
 FILE * m_file = nullptr;
 bool m_enabled = false;
 
+
+#if __PLAYDATE__
+
+PlaydateAPI* pd;
+
+void Logger_Initialize_Playdate(PlaydateAPI* playdate)
+{	
+    #if LOGGER_ENABLED
+		pd = playdate;
+		pd->system->logToConsole("PD console logger on");
+    #endif
+}
+
+#endif
+
+
+
 void Logger_Initialize(const char* pathPrefix)
 {
     #if LOGGER_ENABLED
@@ -45,6 +62,10 @@ void Logger_LogOutput(const char * func, size_t line, const char * format, ...)
 
 void Logger_Write(const char * format, ...)
 {
+	#if __PLAYDATE__
+	pd->system->logToConsole(format);
+	#endif
+
     #if LOGGER_ENABLED
     if (!m_enabled || !m_file)
         return;
@@ -55,10 +76,10 @@ void Logger_Write(const char * format, ...)
     vfprintf(m_file, format, args);
 
     fflush(m_file);
-
-    #if PRINT_TO_CONSOLE
-	vfprintf(stdout, format, args);
-	#endif
+	
+	
+	
+	
     #endif
 	#if PRINT_TO_CONSOLE
 	vfprintf(stdout, format, args);
@@ -67,6 +88,10 @@ void Logger_Write(const char * format, ...)
 
 void Logger_WriteUnformatted(const char * message)
 {
+	#if __PLAYDATE__
+	pd->system->logToConsole(message);
+	#endif
+	
     #if LOGGER_ENABLED
     if (!m_enabled || !m_file)
         return;
