@@ -9,10 +9,13 @@ struct charset
 
 	
     // Map 8-bit PICO-8 characters to UTF-32 codepoints
-    //static std::u32string_view to_utf32[256];
-
+	#if !(__PLAYDATE__)
+    static std::u32string_view to_utf32[256];
+	#endif
     // Map 8-bit PICO-8 characters to UTF-8 string views
-    //static std::string_view to_utf8[256];
+	#if !(__PLAYDATE__)
+    static std::string_view to_utf8[256];
+	#endif
 	
 	// Map uppercase letters to PICO-8 glyphs
     static std::string upper_to_emoji(std::string str);
