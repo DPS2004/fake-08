@@ -18,6 +18,8 @@ extern "C"
 #include "pd_api.h"
 }
 
+
+
 volatile int order = 1;
 int next2(void);
 int next(void) {return order++;}
@@ -84,6 +86,37 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg)
 		Logger_Initialize_Playdate(playdate);
 		
 		Logger_Write("logger writing test \n");
+		
+		Host *host = new Host();
+		Logger_Write("Made playdate host \n");
+		
+		PicoRam *memory = new PicoRam();
+		Logger_Write("Made picoram \n");
+		
+		Audio *audio = new Audio(memory);
+		Logger_Write("Made audio \n");
+		
+		Vm *vm = new Vm(host, memory, nullptr, nullptr, audio);
+		Logger_Write("Made vm \n");
+		
+		host->setUpPaletteColors();
+		host->oneTimeSetup(audio);
+		Logger_Write("host setup done \n");
+		
+		vm->SetCartList(host->listcarts());
+		Logger_Write("set cart list \n");
+		
+		bool loadCart = false;
+		char* cart;
+		
+		Logger_Write("Loading Bios cart\n");
+		if (loadCart){
+			vm->LoadCart(cart);
+		}
+		else {
+			vm->LoadBiosCart();
+		}
+		Logger_Write("Bios Cart Loaded\n");
 		
     }
     

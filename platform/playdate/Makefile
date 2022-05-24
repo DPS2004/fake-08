@@ -26,14 +26,33 @@ VPATH +=
 
 
 
+
 SRC +=  source/main.cpp
+
+
 SRC +=  source/pdnewlib.c
+SRC +=  source/playdateHost.cpp
 
 SRC +=  ../../source/vm.cpp
+	SRC +=  ../../source/graphics.cpp
+		SRC +=  ../../source/nibblehelpers.cpp
+		SRC +=  ../../source/mathhelpers.cpp
+		SRC +=  ../../source/stringToDataHelpers.cpp
+	SRC +=  ../../source/picoluaapi.cpp
+		SRC +=  ../../source/Input.cpp
+		SRC +=  ../../source/printHelper.cpp
+		
+	SRC +=  ../../source/fontdata.cpp
+	SRC +=  ../../source/cart.cpp
+
 SRC +=  ../../source/logger.cpp
+SRC +=  ../../source/Audio.cpp
+
+
 
 # List all user directories here
 UINCDIR += ../../source
+UINCDIR += ../../libs/lodepng
 UINCDIR += ../../libs/z8lua-pd
 
 # List all user C/C++ define here, like -D_DEBUG=1
