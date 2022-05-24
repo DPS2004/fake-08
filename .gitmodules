@@ -1,3 +1,6 @@
 [submodule "libs/z8lua"]
 	path = libs/z8lua
 	url = https://github.com/jtothebell/z8lua.git
+[submodule "libs/z8lua-pd"]
+	path = libs/z8lua-pd
+	url = https://github.com/DPS2004/z8lua-pd.git

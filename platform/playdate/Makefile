@@ -34,7 +34,7 @@ SRC +=  ../../source/logger.cpp
 
 # List all user directories here
 UINCDIR += ../../source
-UINCDIR += ../../libs/z8lua
+UINCDIR += ../../libs/z8lua-pd
 
 # List all user C/C++ define here, like -D_DEBUG=1
 UDEFS += -D__PLAYDATE__
@@ -50,4 +50,4 @@ ULIBS +=
 
 #CLANGFLAGS = -fsanitize=address
 
-include buildsupport/common.mk
+include C_API_EDIT/buildsupport/common.mk
