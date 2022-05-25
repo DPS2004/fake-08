@@ -100,8 +100,8 @@ MCFLAGS = -mthumb -mcpu=$(MCU) $(FPU)
 
 ASFLAGS  = $(MCFLAGS) $(OPT) -g -gdwarf-2 -Wa,-amhls=$(<:.s=.lst) $(ADEFS)
 
-CPFLAGS  = $(MCFLAGS) $(OPT) -gdwarf-2 -Wall -Wno-unused -Wno-unknown-pragmas -fverbose-asm -Wdouble-promotion
-CPFLAGS += -ffunction-sections -fdata-sections $(DEFS)
+CPFLAGS  = $(MCFLAGS) $(OPT) -gdwarf-2 -Wall -Wno-unused -Wno-unknown-pragmas -fverbose-asm -Wdouble-promotion -std=c++17 
+CPFLAGS += -ffunction-sections -fdata-sections -std=c++17 $(DEFS)
 
 CLANGFLAGS += -Wa,-ahlms=$(OBJDIR)/$(notdir $(<:.c=.lst))
 
@@ -153,9 +153,19 @@ $(OBJDIR)/%.cpp.o : %.cpp | OBJDIR DEPDIR
 	mkdir -p `dirname $@`
 	$(CPP) -c $(CPFLAGS) -I . $(INCDIR) $< -o $@
 
-$(OBJDIR)/%.o : %.c | OBJDIR DEPDIR
+$(OBJDIR)/%setup.o : %setup.c | OBJDIR DEPDIR
+	$(info SETUP-------------------------------)
 	mkdir -p `dirname $@`
 	$(CC) -c $(CPFLAGS) -I . $(INCDIR) $< -o $@
+
+$(OBJDIR)/%pdnewlib.o : %pdnewlib.c | OBJDIR DEPDIR
+	$(info NEWLIB-------------------------------)
+	mkdir -p `dirname $@`
+	$(CC) -c $(CPFLAGS) -I . $(INCDIR) $< -o $@
+
+$(OBJDIR)/%.o : %.c | OBJDIR DEPDIR
+	mkdir -p `dirname $@`
+	$(CPP) -c $(CPFLAGS) -I . $(INCDIR) $< -o $@
 
 $(OBJDIR)/%.o : %.s | OBJDIR DEPDIR
 	mkdir -p `dirname $@`
