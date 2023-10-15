@@ -42,6 +42,8 @@ class Vm {
     bool _pauseMenu;
     string _prevCartKey;
     string _nextCartKey;
+    const unsigned char* _nextCartData;
+    size_t _nextCartSize;
 
     string _cartLoadError;
 
@@ -69,7 +71,8 @@ class Vm {
     
     void LoadSettingsCart();
 
-    void LoadCart(string filename);
+    void LoadCart(string filename, bool loadBiosOnFail = true);
+    void LoadCart(const unsigned char* cartData, size_t size, bool loadBiosOnFail = true);
 
     void UpdateAndDraw();
 
@@ -81,6 +84,7 @@ class Vm {
     void CloseCart();
 
     void QueueCartChange(string newcart);
+    void QueueCartChange(const unsigned char* cartData, size_t size);
 
     int GetTargetFps();
 
@@ -136,6 +140,7 @@ class Vm {
 
     void vm_reset();
 
+    void setTargetFps(int targetFps);
     int getFps();
     int getTargetFps();
 
@@ -159,5 +164,8 @@ class Vm {
     
     string getCartBreadcrumb();
     string getCartParam();
+
+    size_t serializeLuaState(char* dest);
+    void deserializeLuaState(const char* src, size_t len);
 };
 

@@ -32,7 +32,7 @@ TEST_CASE("Vm memory functions") {
         memory->Reset();
 
         bool correctValues = true;
-        for(int i = 0; i < 0x10000; ++i) {
+        for(int i = 0; i < 0x8000; ++i) {
             if (i == 0x5f5e) {
                 correctValues &= memory->data[i] == 255;
             }
@@ -45,7 +45,7 @@ TEST_CASE("Vm memory functions") {
             else if (i == 0x5f57) {
                 correctValues &= memory->data[i] == 128;
             }
-            else if (i < 0x4300 || i > 0x55ff) {
+            else if (i < 0x4300 || i > 0x5eff) {
                 correctValues &= memory->data[i] == 0;
             }
         }
@@ -271,16 +271,12 @@ TEST_CASE("Vm memory functions") {
 
         CHECK_EQ(memory->hwState.rngState[0], 20);
     }
-    SUBCASE("poking button state") {
+    SUBCASE("poking button state doesn't affect input") {
         //0000 1010
         vm->vm_poke(0x5f4c, 10);
 
         CHECK_EQ(memory->hwState.buttonStates[0], 10);
-        CHECK_EQ(input->btn(), 10);
-        CHECK_EQ(input->btn(0), false);
-        CHECK_EQ(input->btn(1), true);
-        CHECK_EQ(input->btn(2), false);
-        CHECK_EQ(input->btn(3), true);
+        CHECK_EQ(input->btn(), 0);
     }
     SUBCASE("poking print attributes") {
         vm->vm_poke(0x5f58, 53);

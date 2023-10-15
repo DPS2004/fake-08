@@ -23,7 +23,7 @@ std::string defaultIni =
 "stretch = 1\n"
 "resizekey = 1\n"
 "kbmode = 0\n"
-"menustyle = 1\n"
+"menustyle = 0\n"
 "bgcolor = 0\n";
 
 void Host::setUpPaletteColors(){
@@ -150,7 +150,7 @@ void Host::loadSettingsIni(){
 	#endif
 	
 	//resize hotkey
-	long resizekeySetting = settingsIni.GetLongValue("settings", "resizekey", (long)NoResize);
+	long resizekeySetting = settingsIni.GetLongValue("settings", "resizekey", (long)YesResize);
 	resizekey = (ResizekeyOption) resizekeySetting;
 	
 	//kbmode
@@ -158,7 +158,7 @@ void Host::loadSettingsIni(){
 	kbmode = (KeyboardOption) kbmodeSetting;
 	
 	//bgcolor
-	long menustyleSetting = settingsIni.GetLongValue("settings", "menustyle", (long)Fancy);
+	long menustyleSetting = settingsIni.GetLongValue("settings", "menustyle", (long)Classic);
 	menustyle = (MenuStyleOption) menustyleSetting;
 	
 	//bgcolor
@@ -212,6 +212,36 @@ void Host::saveCartData(std::string cartDataKey, std::string contents) {
         fprintf(file, "%s", contents.c_str());
 		
         fflush(file);
+        
+        fclose(file);
+	}
+}
+
+size_t Host::getFileContents(std::string fileName, char* buffer) {
+	std::string absPath = _logFilePrefix + "cdata/" + fileName;
+    //get_file_bin_contents(absPath, buffer, length);
+	FILE * file = freopen(absPath.c_str(), "rb", stderr);
+    if( file != NULL ) {
+		//Initialize data
+		size_t len;
+		fread(&len, sizeof(len), 1, file);
+		fread(buffer, sizeof(char), len, file);
+        
+        fclose(file);
+
+		return len;
+	}
+
+	return 0;
+}
+
+void Host::writeBufferToFile(std::string fileName, char* buffer, size_t length) {
+	std::string absPath = _logFilePrefix + "cdata/" + fileName;
+    FILE * file = freopen(absPath.c_str(), "w", stderr);
+    if( file != NULL ) {
+		//Initialize data
+		fwrite(&length, sizeof(length), 1, file);
+		fwrite(buffer, sizeof(char), length, file);
         
         fclose(file);
 	}

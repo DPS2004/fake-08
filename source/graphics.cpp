@@ -4,11 +4,15 @@
 #include <string.h>
 #include <string>
 #include <algorithm>
+#include <vector>
+#include <tuple>
+using namespace std;
 
 #include "graphics.h"
 #include "hostVmShared.h"
 #include "nibblehelpers.h"
 #include "mathhelpers.h"
+#include "fontdata.h"
 
 #include "stringToDataHelpers.h"
 
@@ -125,6 +129,10 @@ void Graphics::copySpriteToScreen(
 		while (x < scr_w) {
 			int abs_spr_x = spr_x + (flip_x ? spr_w - (x + 1) : x);
 			int abs_spr_y = spr_y + (flip_y ? spr_h - (y + 1) : y);
+			if (!IS_VALID_SPR_IDX(abs_spr_x, abs_spr_y)){
+				++x;
+				continue;
+			}
 			uint8_t bothPix = spritebuffer[COMBINED_IDX(abs_spr_x, abs_spr_y)];
 
 			//uint8_t c = (BITMASK(0) & abs_spr_x)== 0 
@@ -297,21 +305,28 @@ void Graphics::copyStretchSpriteToScreen(
 	if (hwState.colorBitmask == 0xff){
 		for (int y = 0; y < scr_h; y++) {
 			int sprY = ((spr_y + y * dy) >> 16);
-			uint8_t* spr = spritebuffer + (sprY & 0x7f) * 64;
+			if (sprY > 127) {
+				continue;
+			}
+			uint8_t* spr = spritebuffer + (sprY * 64);
 
 			if (skipStretchPx && prevSprY == sprY){
 				continue;
 			}
+			
 			prevSprY = sprY;
 
 			if (!flip_x) {
 				for (int x = 0; x < scr_w; x++) {
 					int shiftedPixIndex = (spr_x + x * dx) >> 16;
+					if (shiftedPixIndex > 127) {
+						continue;
+					}
 					if (skipStretchPx && prevSprX == shiftedPixIndex){
 						continue;
 					}
 					prevSprX = shiftedPixIndex;
-					int preShiftedCombinedPixIndex = (shiftedPixIndex / 2) & 0x7f;
+					int preShiftedCombinedPixIndex = (shiftedPixIndex / 2);
 					uint8_t bothPix = spr[preShiftedCombinedPixIndex];
 
 					uint8_t c = shiftedPixIndex % 2 == 0 
@@ -327,7 +342,11 @@ void Graphics::copyStretchSpriteToScreen(
 			} else {
 				for (int x = 0; x < scr_w; x++) {
 					int pixIndex = (spr_x + spr_w - (x + 1) * dx);
-					int combinedPixIdx = ((pixIndex / 2) >> 16) & 0x7f;
+					int shiftedPixIndex = pixIndex >> 16;
+					if (shiftedPixIndex > 127) {
+						continue;
+					}
+					int combinedPixIdx = shiftedPixIndex / 2;
 					uint8_t bothPix = spr[combinedPixIdx];
 
 					uint8_t c = (pixIndex >> 16) % 2 == 0 
@@ -345,15 +364,22 @@ void Graphics::copyStretchSpriteToScreen(
 	}
 	else {
 		for (int y = 0; y < scr_h; y++) {
-			uint8_t* spr = spritebuffer + (((spr_y + y * dy) >> 16) & 0x7f) * 64;
+			int sprY = ((spr_y + y * dy) >> 16);
+			if (sprY > 127) {
+				continue;
+			}
+			uint8_t* spr = spritebuffer + (sprY) * 64;
 
 			if (!flip_x) {
 				for (int x = 0; x < scr_w; x++) {
-					int pixIndex = (spr_x + x * dx);
-					int combinedPixIdx = ((pixIndex / 2) >> 16) & 0x7f;
+					int shiftedPixIndex = (spr_x + x * dx) >> 16;
+					if (shiftedPixIndex > 127) {
+						continue;
+					}
+					int combinedPixIdx = (shiftedPixIndex / 2);
 					uint8_t bothPix = spr[combinedPixIdx];
 
-					uint8_t c = (pixIndex >> 16) % 2 == 0 
+					uint8_t c = shiftedPixIndex % 2 == 0 
 						? bothPix & 0x0f //just first 4 bits
 						: bothPix >> 4;  //just last 4 bits
 
@@ -376,7 +402,11 @@ void Graphics::copyStretchSpriteToScreen(
 			} else {
 				for (int x = 0; x < scr_w; x++) {
 					int pixIndex = (spr_x + spr_w - (x + 1) * dx);
-					int combinedPixIdx = ((pixIndex / 2) >> 16) & 0x7f;
+					int shiftedPixIndex = pixIndex >> 16;
+					if (shiftedPixIndex > 127) {
+						continue;
+					}
+					int combinedPixIdx = (shiftedPixIndex / 2);
 					uint8_t bothPix = spr[combinedPixIdx];
 
 					uint8_t c = (pixIndex >> 16) % 2 == 0 
@@ -1272,48 +1302,129 @@ fix32 Graphics::fillp(fix32 pat) {
 }
 
 
-int Graphics::drawCharacter(uint8_t ch, int x, int y, uint8_t printMode) {
+int Graphics::drawCharacter(
+	uint8_t ch,
+	int x,
+	int y,
+	uint8_t fgColor,
+	uint8_t bgColor,
+	uint8_t printMode,
+	int forceCharWidth,
+	int forceCharHeight) {
 	int extraCharWidth = 0;
-	if ((printMode & PRINT_MODE_ON) == PRINT_MODE_ON){
-		int scrW = 4;
-		int scrH = 5;
-		bool evenPxOnly = false;
 
+	bool useCustomFont = (printMode & PRINT_MODE_CUSTOM_FONT) == PRINT_MODE_CUSTOM_FONT;
+	int defaultCharWidth = useCustomFont ? _memory->data[0x5600] : 4;
+	int defaultWideCharWidth = useCustomFont ? _memory->data[0x5601] : 8;
+	int defaultCharHeight = useCustomFont ? _memory->data[0x5602] : 5;
+
+	if (ch > 0x0f) {
+		uint8_t charWidth = 
+			ch < 0x80
+			? forceCharWidth > -1 && forceCharWidth < 4 ? forceCharWidth : defaultCharWidth
+			: forceCharWidth > -1 && forceCharWidth < 4 ? (forceCharWidth + 4) : defaultWideCharWidth;
+
+		uint8_t charHeight = forceCharHeight > -1 && forceCharHeight < 5 ? forceCharHeight : defaultCharHeight;
+		
+		auto result = drawCharacterFromBytes(
+			useCustomFont ? &(_memory->data[0x5600 + ch*8]) : &(defaultFontBinaryData[ch*8]),
+			x,
+			y,
+			fgColor,
+			bgColor,
+			printMode,
+			charWidth,
+			charHeight
+		);
+		extraCharWidth = get<0>(result);
+	}
+
+	if ((printMode & PRINT_MODE_ON) == PRINT_MODE_ON){
+		return 0;
+	}
+
+	return extraCharWidth;
+}
+
+std::tuple<int, int> Graphics::drawCharacterFromBytes(
+	uint8_t chBytes[],
+	int x,
+	int y,
+	uint8_t fgColor,
+	uint8_t bgColor,
+	uint8_t printMode,
+	uint8_t charWidth,
+	uint8_t charHeight) {
+	
+	applyCameraToPoint(&x, &y);
+	uint8_t *screenBuffer = GetP8FrameBuffer();
+	
+	int extraCharWidth = 0;
+	int extraCharHeight = 0;
+	int wFactor = 1;
+	int hFactor = 1;
+	bool evenPxOnly = false;
+	bool invertColors = false;
+	bool solidBg = false;
+
+	if ((printMode & PRINT_MODE_ON) == PRINT_MODE_ON){
 		if ((printMode & PRINT_MODE_WIDE) == PRINT_MODE_WIDE) {
-			scrW *= 2;
+			wFactor = 2;
+			extraCharWidth = charWidth;
 		}
 		if((printMode & PRINT_MODE_TALL) == PRINT_MODE_TALL) {
-			scrH *= 2;
+			hFactor = 2;
+			extraCharHeight = charHeight;
 		}
 		if((printMode & PRINT_MODE_STRIPEY) == PRINT_MODE_STRIPEY) {
 			//draw every other pixel-- also kinda broken on pico 8 0.2.4 
 			evenPxOnly = true;
 		}
-		//TODO: other print modes
-
-		if (ch >= 0x10 && ch < 0x80) {
-			int index = ch - 0x10;
-			copyStretchSpriteToScreen(fontSpriteData, (index % 16) * 8, (index / 16) * 8, 4, 5, x, y, scrW, scrH, false, false, evenPxOnly);
-		} else if (ch >= 0x80) {
-			int index = ch - 0x80;
-			extraCharWidth = 4;
-			copyStretchSpriteToScreen(fontSpriteData, (index % 16) * 8, (index / 16) * 8 + 56, 8, 5, x, y, (scrW + extraCharWidth), scrH, false, false, evenPxOnly);
-			
+		if((printMode & PRINT_MODE_INVERTED) == PRINT_MODE_INVERTED) {
+			invertColors = true;
 		}
-
-	}
-	else{
-		if (ch >= 0x10 && ch < 0x80) {
-			int index = ch - 0x10;
-			copySpriteToScreen(fontSpriteData, x, y, (index % 16) * 8, (index / 16) * 8, 4, 5, false, false);
-		} else if (ch >= 0x80) {
-			int index = ch - 0x80;
-			copySpriteToScreen(fontSpriteData, x, y, (index % 16) * 8, (index / 16) * 8 + 56, 8, 5, false, false);
-			extraCharWidth = 4;
+		if((printMode & PRINT_MODE_SOLID_BG) == PRINT_MODE_SOLID_BG) {
+			solidBg = true;
 		}
 	}
 
-	return extraCharWidth;
+	//possible todo: check perf if this is better than doing it in the other loop (m)
+	// if (bgColor != 0) {
+	// 	uint8_t prevPenColor = _memory->drawState.color;
+	// 	rectfill(x-1, y-1, x + charWidth*wFactor - 1, y + charHeight*hFactor - 1, bgColor);
+	// 	_memory->drawState.color = prevPenColor;
+	// }
+	fgColor &= 0x0f;
+	bgColor &= 0x0f;
+
+	for (int relDestY = 0; relDestY < charHeight * hFactor; relDestY++) {
+		for(int relDestX = 0; relDestX < charWidth * wFactor; relDestX++) {
+
+			bool on = BITMASK(relDestX / wFactor) & chBytes[relDestY / hFactor];
+			on &= hFactor == 1 || !evenPxOnly || (relDestY % 2 == 0);
+			on &= wFactor == 1 || !evenPxOnly || (relDestX % 2 == 0);
+
+			int absDestX = x + relDestX;
+			int absDestY = y + relDestY;
+
+			if (isWithinClip(absDestX, absDestY)) {
+				if (invertColors) {
+					on = !on;
+				}
+				
+				if (on) {
+					setPixelNibble(absDestX, absDestY, fgColor, screenBuffer);			
+				}
+				if(!on && (solidBg || bgColor > 0)) {
+					setPixelNibble(absDestX, absDestY, bgColor, screenBuffer);
+				}
+			}
+		}
+	}
+
+	std::tuple<int, int> retVal (extraCharWidth, extraCharHeight);
+
+	return retVal;
 }
 
 void Graphics::spr(
@@ -1369,11 +1480,17 @@ void Graphics::fset(uint8_t n, uint8_t v){
 }
 
 uint8_t Graphics::sget(uint8_t x, uint8_t y){
-	return getPixelNibble(x, y, GetP8SpriteSheetBuffer());
+	if (IS_VALID_SPR_IDX(x, y)) {
+		return getPixelNibble(x, y, GetP8SpriteSheetBuffer());
+	}
+	return 0;
 }
 
 void Graphics::sset(uint8_t x, uint8_t y, uint8_t c){
-	setPixelNibble(x, y, c, GetP8SpriteSheetBuffer());
+	if (IS_VALID_SPR_IDX(x, y)) {
+		setPixelNibble(x, y, c, GetP8SpriteSheetBuffer());
+	}
+	return;
 }
 
 std::tuple<int16_t, int16_t> Graphics::camera() {
@@ -1421,10 +1538,12 @@ uint8_t Graphics::mget(int celx, int cely){
 
 	const int mapW = _memory->hwState.widthOfTheMap == 0 ? 256 : _memory->hwState.widthOfTheMap;
 	const int mapH = mapSize / mapW;
+	const int maxXIdx = mapW - 1;
+	const int maxYIdx = mapH - 1;
 
 	const int idx = cely * mapW + celx;
 
-	if (celx < 0 || celx > mapW || cely < 0 || cely > mapH) {
+	if (celx < 0 || celx > maxXIdx || cely < 0 || cely > maxYIdx) {
         return 0;
 	}
 	
@@ -1496,6 +1615,16 @@ void Graphics::pal() {
 	}
 
 	this->palt();
+}
+
+void Graphics::pal(uint8_t p) {
+	for (uint8_t c = 0; c < 16; c++) {
+		if (p == 0) {
+			_memory->drawState.drawPaletteMap[c] = c;
+		} else if (p == 1) {
+			_memory->drawState.screenPaletteMap[c] = c;
+		}
+	}
 }
 
 uint8_t Graphics::pal(uint8_t c0, uint8_t c1, uint8_t p){

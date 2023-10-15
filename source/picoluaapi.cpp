@@ -301,26 +301,33 @@ int print(lua_State *L){
         return 0;
     }
 
-    const char * str = "";
+    const char * charArray = "";
+    size_t len = 0;
     int newx = 0;
 
     //todo: handle other cases, maybe move this somewhere else
     //learned this from zepto8 https://github.com/samhocevar/zepto8/blob/27f83fe0626d4823fe2a33568d8310d8def84ae9/src/pico8/vm.cpp
     if (lua_isnil(L, 1)){
-        str = "[nil]";
+        charArray = "[nil]";
+        len = 5;
     }
     else if (lua_isstring(L, 1)){
-        str = lua_tolstring(L, 1, nullptr);
+        charArray = lua_tolstring(L, 1, &len);
     }
     else if (lua_isnumber(L, 1)){
-        str = lua_tolstring(L, 1, nullptr);
+        charArray = lua_tolstring(L, 1, &len);
     }
     else if (lua_isboolean(L, 1)){
-        str = lua_toboolean(L, 1) ? "true" : "false";
+        int boolVal = lua_toboolean(L, 1);
+        charArray = boolVal ? "true" : "false";
+        len = boolVal ? 4 : 5;
     }
     else if (lua_isfunction(L, 1)){
-        str = "[function]";
+        charArray = "[function]";
+        len = 10;
     }
+
+    std::string str = std::string(charArray, len);
 
     if (numArgs < 2) {
         newx = print(str);
@@ -585,10 +592,7 @@ int pal(lua_State *L) {
     if (numArgs == 0) {
         _graphicsForLuaApi->pal();
 
-        //I think this always returns 0, not nil
-        lua_pushnumber(L, 0);
-        
-        return 1;
+        return 0;
     }
 
     uint8_t p = 0;
@@ -611,6 +615,12 @@ int pal(lua_State *L) {
             }
             lua_pop(L, 1);
         }
+
+        return 0;
+    } else if (numArgs == 1) {
+        p = lua_tonumber(L, 1);
+        
+        _graphicsForLuaApi->pal(p);
 
         return 0;
     }
@@ -814,51 +824,72 @@ int stat(lua_State *L) {
         break;
         //16-19 audio sfx currently playing
         case 16:
+        case 46:
             lua_pushnumber(L, _audioForLuaApi->getCurrentSfxId(0));
             return 1;
         break;
         case 17:
+        case 47:
             lua_pushnumber(L, _audioForLuaApi->getCurrentSfxId(1));
             return 1;
         break;
         case 18:
+        case 48:
             lua_pushnumber(L, _audioForLuaApi->getCurrentSfxId(2));
             return 1;
         break;
         case 19:
+        case 49:
             lua_pushnumber(L, _audioForLuaApi->getCurrentSfxId(3));
             return 1;
         break;
         //20-23 note idx of sfx currently playing
         case 20:
+        case 50:
             lua_pushnumber(L, _audioForLuaApi->getCurrentNoteNumber(0));
             return 1;
         break;
         case 21:
+        case 51:
             lua_pushnumber(L, _audioForLuaApi->getCurrentNoteNumber(1));
             return 1;
         break;
         case 22:
+        case 52:
             lua_pushnumber(L, _audioForLuaApi->getCurrentNoteNumber(2));
             return 1;
         break;
         case 23:
+        case 53:
             lua_pushnumber(L, _audioForLuaApi->getCurrentNoteNumber(3));
             return 1;
         break;
         //current music pattern
         case 24:
+        case 54:
             lua_pushnumber(L, _audioForLuaApi->getCurrentMusic());
             return 1;
         break;
         //current music count
         case 25:
+        case 55:
             lua_pushnumber(L, _audioForLuaApi->getMusicPatternCount());
             return 1;
         break;
         //current music tick count
+        case 56:
         case 26:
             lua_pushnumber(L, _audioForLuaApi->getMusicTickCount());
+            return 1;
+        break;
+        //if SDL scancode is pressed. always false for now
+        case 28:
+            lua_pushboolean(L, false);
+            return 1;
+        break;
+        //unknown. appears to always be 0
+        case 29:
+            lua_pushnumber(L, 0);
             return 1;
         break;
         //was a key pressed 
@@ -956,7 +987,6 @@ int music(lua_State *L) {
     }
 
     _audioForLuaApi->api_music(n, fadems, channelmask);
-
     return 0;
 }
 
@@ -972,7 +1002,6 @@ int sfx(lua_State *L) {
     }
 
     _audioForLuaApi->api_sfx((int)n, channel, offset);
-    
     return 0;
 }
 
@@ -984,9 +1013,9 @@ int cstore(lua_State *L) {
 }
 
 int api_memcpy(lua_State *L) {
-    int dest = lua_tonumber(L,1);
-    int src = lua_tonumber(L,2);
-    int len = lua_tonumber(L,3);
+    uint16_t dest = (uint16_t)lua_tointeger(L,1);
+    uint16_t src = (uint16_t)lua_tointeger(L,2);
+    uint16_t len = (uint16_t)lua_tointeger(L,3);
 
     _vmForLuaApi->vm_memcpy(dest, src, len);
 
@@ -994,9 +1023,9 @@ int api_memcpy(lua_State *L) {
 }
 
 int api_memset(lua_State *L) {
-    int dest = lua_tonumber(L,1);
-    int val = lua_tonumber(L,2);
-    int len = lua_tonumber(L,3);
+    uint16_t dest = (uint16_t)lua_tointeger(L,1);
+    uint16_t val = (uint16_t)lua_tointeger(L,2);
+    uint16_t len = (uint16_t)lua_tointeger(L,3);
 
     _vmForLuaApi->vm_memset(dest, val, len);
 
@@ -1007,7 +1036,7 @@ int peek(lua_State *L) {
     int numArgs = lua_gettop(L);
     int numToReturn = 1;
 
-    int addr = lua_tonumber(L,1);
+    uint16_t addr = (uint16_t)lua_tointeger(L,1);
 
     if (numArgs > 1) {
         numToReturn = lua_tonumber(L,2);
@@ -1025,7 +1054,7 @@ int peek(lua_State *L) {
 int poke(lua_State *L) {
     int numArgs = lua_gettop(L);
 
-    int dest = lua_tonumber(L,1);
+    uint16_t dest = (uint16_t)lua_tointeger(L,1);
     uint8_t val = 0;
     if (numArgs > 1) {
         val = lua_tonumber(L,2);
@@ -1044,7 +1073,7 @@ int poke(lua_State *L) {
 }
 
 int peek2(lua_State *L) {
-    int addr = lua_tonumber(L,1);
+    uint16_t addr = (uint16_t)lua_tointeger(L,1);
 
     int16_t val = _vmForLuaApi->vm_peek2(addr);
 
@@ -1056,7 +1085,7 @@ int peek2(lua_State *L) {
 int poke2(lua_State *L) {
     int numArgs = lua_gettop(L);
 
-    int dest = lua_tonumber(L,1);
+    uint16_t dest = (uint16_t)lua_tointeger(L,1);
 
     int val = 0;
     if (numArgs > 1) {
@@ -1076,7 +1105,7 @@ int poke2(lua_State *L) {
 }
 
 int peek4(lua_State *L) {
-    int addr = lua_tonumber(L,1);
+    uint16_t addr = (uint16_t)lua_tointeger(L,1);
 
     fix32 val = _vmForLuaApi->vm_peek4(addr);
 
@@ -1088,7 +1117,7 @@ int peek4(lua_State *L) {
 int poke4(lua_State *L) {
     int numArgs = lua_gettop(L);
 
-    int dest = lua_tonumber(L,1);
+    uint16_t dest = (uint16_t)lua_tointeger(L,1);
 
     fix32 val = 0;
     if (numArgs > 1) {
@@ -1108,18 +1137,18 @@ int poke4(lua_State *L) {
 }
 
 int reload(lua_State *L) {
-    int dest = 0;
-    int src = 0;
-    int len = 0x4300;
+    uint16_t dest = 0;
+    uint16_t src = 0;
+    uint16_t len = 0x4300;
     const char * str = "";
     if (lua_gettop(L) > 0) {
-        dest = lua_tonumber(L,1);
+        dest = (uint16_t)lua_tointeger(L,1);
     }
     if (lua_gettop(L) > 1) {
-        src = lua_tonumber(L,2);
+        src = (uint16_t)lua_tointeger(L,2);
     }
     if (lua_gettop(L) > 2) {
-        len = lua_tonumber(L,3);
+        len = (uint16_t)lua_tointeger(L,3);
     }
     if (lua_gettop(L) > 3) {
         str = lua_tolstring(L, 4, nullptr);
@@ -1253,6 +1282,12 @@ int load(lua_State *L) {
 
 int reset(lua_State *L) {
     _vmForLuaApi->vm_reset();
+
+    return 0;
+}
+
+int setFps(lua_State *L){
+    _vmForLuaApi->setTargetFps(lua_tointeger(L, 1));
 
     return 0;
 }

@@ -22,8 +22,8 @@ using namespace std;
 // sdl
 #include <SDL2/SDL.h>
 
-#define WINDOW_SIZE_X 1280
-#define WINDOW_SIZE_Y 720
+/*#define WINDOW_SIZE_X 1280
+#define WINDOW_SIZE_Y 720*/
 
 #define WINDOW_FLAGS 0
 
@@ -45,6 +45,26 @@ string _desktopSdl2customBiosLua = "cartpath = \"~/p8carts/\"\n"
 
 Host::Host() 
 {
+
+    SDL_DisplayMode current;
+
+    SDL_Init(SDL_INIT_VIDEO);
+
+    int should_be_zero = SDL_GetCurrentDisplayMode(0, &current);
+
+    if(should_be_zero != 0) {
+      // In case of error...
+      SDL_Log("Could not get display mode for video display #%d: %s", 0, SDL_GetError());
+    }
+
+    else {
+      // On success, print the current display mode.
+      SDL_Log("Display #%d: current display mode is %dx%dpx @ %dhz.", 0, current.w, current.h, current.refresh_rate);
+    }
+
+    int WINDOW_SIZE_X=current.w;
+    int WINDOW_SIZE_Y=current.h;
+
     struct stat st = {0};
 
     int res = chdir(getenv("HOME"));
@@ -80,7 +100,7 @@ Host::Host()
 
 InputState_t Host::scanInput(){
     currKDown = 0;
-    currKHeld = 0;
+    uint8_t kUp = 0;
     stretchKeyPressed = false;
 
     currKBDown = false;
@@ -125,6 +145,25 @@ InputState_t Host::scanInput(){
                     case SDLK_x:     currKDown |= P8_KEY_O; break;
                     case SDLK_c:     currKDown |= P8_KEY_X; break;
                     case SDLK_r:     stretchKeyPressed = true; break;
+                    case SDLK_F2:    currKDown |= P8_KEY_7; break;
+
+                    //case SDLK_F2:    currKBKey = "F2"; currKBDown = true; break;
+                    //case SDLK_F4:    currKBKey = "F4"; currKBDown = true; break;
+                }
+                break;
+            
+            case SDL_KEYUP:
+                switch (event.key.keysym.sym)
+                {
+                    case SDLK_ESCAPE:case SDLK_RETURN:case SDLK_RETURN2:
+                                     kUp |= P8_KEY_PAUSE; break;
+                    case SDLK_LEFT:  kUp |= P8_KEY_LEFT; break;
+                    case SDLK_RIGHT: kUp |= P8_KEY_RIGHT; break;
+                    case SDLK_UP:    kUp |= P8_KEY_UP; break;
+                    case SDLK_DOWN:  kUp |= P8_KEY_DOWN; break;
+                    case SDLK_z:     kUp |= P8_KEY_X; break;
+                    case SDLK_x:     kUp |= P8_KEY_O; break;
+                    case SDLK_c:     kUp |= P8_KEY_X; break;
                 }
                 break;
 
@@ -153,39 +192,8 @@ InputState_t Host::scanInput(){
         picoMouseState |= 2;
     }
 
-    const Uint8* keystate = SDL_GetKeyboardState(NULL);
-
-    //continuous-response keys
-    if(keystate[SDL_SCANCODE_ESCAPE]){
-        currKHeld |= P8_KEY_PAUSE;
-    }
-    if(keystate[SDL_SCANCODE_RETURN]){
-        currKHeld |= P8_KEY_PAUSE;
-    }
-    if(keystate[SDL_SCANCODE_RETURN2]){
-        currKHeld |= P8_KEY_PAUSE;
-    }
-    if(keystate[SDL_SCANCODE_LEFT]){
-        currKHeld |= P8_KEY_LEFT;
-    }
-    if(keystate[SDL_SCANCODE_RIGHT]){
-        currKHeld |= P8_KEY_RIGHT;;
-    }
-    if(keystate[SDL_SCANCODE_UP]){
-        currKHeld |= P8_KEY_UP;
-    }
-    if(keystate[SDL_SCANCODE_DOWN]){
-        currKHeld |= P8_KEY_DOWN;
-    }
-    if(keystate[SDL_SCANCODE_Z]){
-        currKHeld |= P8_KEY_X;
-    }
-    if(keystate[SDL_SCANCODE_X]){
-        currKHeld |= P8_KEY_O;
-    }
-    if(keystate[SDL_SCANCODE_C]){
-        currKHeld |= P8_KEY_X;
-    }
+    currKHeld |= currKDown;
+    currKHeld ^= kUp;
     
     return InputState_t {
         currKDown,

@@ -19,6 +19,24 @@ std::string get_file_contents(std::string filename){
   return "";
 }
 
+std::vector<char> get_file_as_buffer(std::string filename){
+    std::ifstream in(filename, std::ios::in | std::ios::binary);
+    if (in)
+    {
+        in.seekg(0, std::ios::end);
+        std::streamsize size = in.tellg();
+        in.seekg(0, std::ios::beg);
+
+        std::vector<char> buffer(size);
+        if (in.read(buffer.data(), size)) {
+            return buffer;
+        }
+    }
+
+    std::vector<char> buffer(0);
+    return buffer;
+}
+
 std::string get_first_four_chars(std::string filename){
     std::ifstream in(filename, std::ios::in | std::ios::binary);
     if (in)
@@ -48,10 +66,10 @@ std::vector<unsigned char> get_file_buffer(std::string filename){
 
 //https://stackoverflow.com/a/8518855
 std::string getDirectory(const std::string& fname){
-     size_t pos = fname.find_last_of("\\/");
-     return (std::string::npos == pos)
-         ? ""
-         : fname.substr(0, pos);
+    size_t pos = fname.find_last_of("\\/");
+    return (std::string::npos == pos)
+        ? ""
+        : fname.substr(0, pos);
 }
 
 bool isAbsolutePath (std::string const &path) {
@@ -61,12 +79,14 @@ bool isAbsolutePath (std::string const &path) {
 
     if (path[0] == '/') {
         return true;
-    } 
+    }
     
     size_t colonPos = path.find_first_of(":");
     size_t slashPos = path.find_first_of("/");
+    size_t backSlashPos = path.find_first_of("\\");
 
-    if (colonPos != std::string::npos && slashPos == (colonPos + 1)){
+    if (colonPos != std::string::npos && 
+        (slashPos == (colonPos + 1) || backSlashPos == (colonPos + 1))){
         return true;
     }
     
@@ -99,5 +119,10 @@ bool isHiddenFile (std::string const &fullString) {
 bool isCartFile (std::string const &fullString) {
     return !isHiddenFile(fullString) && 
         (hasEnding(fullString, ".p8") || hasEnding(fullString, ".png"));
+}
+
+bool isCPostFile (std::string const &fullString) {
+    return !isHiddenFile(fullString) && 
+       fullString.rfind("cpost", 0) == 0;
 }
 

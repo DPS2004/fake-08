@@ -1,6 +1,7 @@
 #include <string>
 
 #include "printHelper.h"
+#include "nibblehelpers.h"
 
 #include <string>
 #include "graphics.h"
@@ -11,6 +12,17 @@ PicoRam* _ph_mem;
 Graphics* _ph_graphics;
 Vm* _ph_vm;
 Audio* _ph_audio;
+
+void hexStrToBytes(std::string hex, uint8_t byteBuff[]) {
+  char buff[3];
+  buff[2] = 0;
+  for (unsigned int i = 0; i < hex.length(); i += 2) {
+    buff[0] = hex[i];
+    buff[1] = hex[i+1];
+    uint8_t byte = (uint8_t) strtol(buff, NULL, 16);
+    byteBuff[i/2] = byte;
+  }
+}
 
 void initPrintHelper(PicoRam* memory, Graphics* graphics, Vm* vm, Audio* audio) {
     _ph_mem = memory;
@@ -65,7 +77,49 @@ int pow2(int power){
 }
 
 int print(std::string str) {
-	int result = print(str, _ph_mem->drawState.text_x, _ph_mem->drawState.text_y);
+    //todo: default is not 0,0?
+    int x = _ph_mem->drawState.text_x;
+    int y = _ph_mem->drawState.text_y;
+    if (y >= 127) {
+        //Memcy screen to itself offset by how many lines needed (y + line height)
+        int lineHeight = 6; // possibly need to check if bigger font?
+        int linesToCopy = 127 - lineHeight; 
+        int startY = y - linesToCopy; 
+
+        memmove(
+            &_ph_mem->screenBuffer, 
+            &_ph_mem->screenBuffer[COMBINED_IDX(0, startY)],
+            linesToCopy * 64);
+        
+        //set the rest of the screen buffer to 0 (black)
+        memset(
+            &_ph_mem->screenBuffer[COMBINED_IDX(0, linesToCopy)],
+            0,
+            startY * 64);
+
+        y = _ph_mem->drawState.text_y = 127 - lineHeight;
+        //Memcpy buffy back to screen
+
+    }
+	int result = print(str, x, y);
+
+    if (_ph_mem->drawState.text_y >= 127) {
+        int lineHeight = 5; // possibly need to check if bigger font?
+        int linesToCopy = 127 - lineHeight; 
+        int startY = _ph_mem->drawState.text_y - linesToCopy; 
+        memmove(
+            &_ph_mem->screenBuffer, 
+            &_ph_mem->screenBuffer[COMBINED_IDX(0, startY)],
+            linesToCopy * 64);
+        
+        //set the rest of the screen buffer to 0 (black)
+        memset(
+            &_ph_mem->screenBuffer[COMBINED_IDX(0, linesToCopy)],
+            0,
+            startY * 64);
+
+        y = _ph_mem->drawState.text_y = 127 - lineHeight;
+    }
 
 	return result;
 }
@@ -79,12 +133,22 @@ int print(std::string str, int x, int y, uint8_t c) {
 
 	_ph_mem->drawState.text_x = x;
 	_ph_mem->drawState.text_y = y;
+    int length = str.length();
     int homeX = x;
     int homeY = y;
+    int prevX = x;
+    int prevY = y;
     int tabStopWidth = 4;
     int charWidth = 4;
     int charHeight = 6;
-    int lineHeight = 6;
+    int lineHeight = 0;
+    int forceCharWidth = -1;
+    int forceCharHeight = -1;
+    uint8_t bgColor = 0;
+    uint8_t fgColor = _ph_mem->drawState.color;
+    uint8_t charBytes[8];
+    uint8_t audioStrBytes[32];
+    bool cancelWrap = false;
 
     uint8_t printMode = _ph_mem->hwState.printAttributes;
 
@@ -92,41 +156,48 @@ int print(std::string str, int x, int y, uint8_t c) {
         printMode = 0;
     }
 
-	uint8_t effectiveC = _ph_graphics->getDrawPalMappedColor(c);
+    if ((printMode & PRINT_MODE_CUSTOM_FONT)) {
+        charWidth = _ph_mem->data[0x5600];
+        charHeight = _ph_mem->data[0x5602];
+    }
 
-	//font sprite sheet has text as color 7, with 0 as transparent. We need to override
-	//these values and restore them after
-	uint8_t prevDrawPal[16];
-	for(uint8_t i = 0; i < 16; i++) {
-		prevDrawPal[i] = _ph_mem->drawState.drawPaletteMap[i];
-		_ph_mem->drawState.drawPaletteMap[i] = i;
-	}
-
-	_ph_mem->drawState.drawPaletteMap[7] = effectiveC;
-	_ph_mem->drawState.drawPaletteMap[0] = 16; //transparent
+    uint8_t* drawPal = _ph_mem->drawState.drawPaletteMap;
 
     int framesBetweenChars = 0;
     int framesToPause = 0;
     int rhsWrap = -1;
 
 
-	for (size_t n = 0; n < str.length(); n++) {
+	for (size_t n = 0; n < length; n++) {
 		uint8_t ch = str[n];
         framesToPause = framesBetweenChars;
-		if (ch == 1) { // "\*{p0}" repeat the next character p0 times
+        if (ch == 0) { // null stop printing
+            _ph_mem->drawState.text_x=x;
+            _ph_mem->drawState.text_y=y;
+
+            return x;
+        }
+        else if (ch == 1) { // "\*{p0}" repeat the next character p0 times
 			uint8_t timesChr = str[++n];
 			int times = p0CharToNum(timesChr);
 
 			ch = str[++n];
 			for(int i = 0; i < times; i++) {
-				x += charWidth +  _ph_graphics->drawCharacter(ch, x, y, printMode);
+                //TODO: combine with other draw character call - fix missing bg? lineheight?
+				x += charWidth +  _ph_graphics->drawCharacter(
+                    ch,
+                    x,
+                    y,
+                    drawPal[fgColor & 0x0f],
+                    drawPal[bgColor & 0x0f],
+                    printMode,
+                    forceCharWidth,
+                    forceCharHeight);
 			}
 		}
 		else if (ch == 2) { // "\#{p0}" draw text on a solid background color
 			uint8_t bgColChar = str[++n];
-			uint8_t bgCol = p0CharToNum(bgColChar);
-
-			_ph_mem->drawState.drawPaletteMap[0] = bgCol;
+			bgColor = p0CharToNum(bgColChar);
 		}
 		else if (ch == 3) { // "\-{p0}" move text cursor horizontally by 16-p0 pixels
 			uint8_t pixelCountChar = str[++n];
@@ -199,14 +270,15 @@ int print(std::string str, int x, int y, uint8_t c) {
             }
             else if (commandChar == 'x'){
                 uint8_t charWidthChar = str[++n];
-                charWidth = p0CharToNum(charWidthChar);
+                forceCharWidth = p0CharToNum(charWidthChar);
+                charWidth = forceCharWidth;
             }
             else if (commandChar == 'y'){
                 //this behaves in a way I wouldn't expect in pico 8- it seems to apply to the next print statment
                 //but not if there is a \n in the string. Not sure if this is a bug or not
                 uint8_t charHeightChar = str[++n];
-                charHeight = p0CharToNum(charHeightChar);
-                lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
+                forceCharHeight = p0CharToNum(charHeightChar);
+                charHeight = forceCharHeight;
             }
             else if (commandChar == 'w'){
                 printMode |= PRINT_MODE_ON;
@@ -217,7 +289,6 @@ int print(std::string str, int x, int y, uint8_t c) {
                 printMode |= PRINT_MODE_ON;
                 printMode |= PRINT_MODE_TALL;
                 charHeight = 12;
-                lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
             }
             else if (commandChar == '='){
                 printMode |= PRINT_MODE_ON;
@@ -243,6 +314,35 @@ int print(std::string str, int x, int y, uint8_t c) {
                 printMode |= PRINT_MODE_ON;
                 printMode |= PRINT_MODE_SOLID_BG;
             }
+            else if (commandChar == ':' || commandChar == '.'){
+                charHeight = forceCharHeight > 0 ? forceCharHeight : 8;
+                if (commandChar == ':') {
+                    std::string hexStr = str.substr(n+1, 16);
+                    n+=16;
+                    hexStrToBytes(hexStr, charBytes);
+                }
+                else {
+                    std::string binStr = str.substr(n+1, 8);
+                    n+=8;
+                    for(size_t i = 0; i < 8; i++) {
+                        charBytes[i] = binStr[i];
+                    }
+                }
+
+                auto values = _ph_graphics->drawCharacterFromBytes(
+                    charBytes,
+                    x,
+                    y,
+                    drawPal[fgColor & 0x0f],
+                    drawPal[bgColor & 0x0f],
+                    printMode,
+                    8,
+                    charHeight);
+
+                x += 8 + get<0>(values);
+                charHeight = charHeight + get<1>(values);
+                lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
+            }
             else if (commandChar == '-'){
                 uint8_t turnOffModeChar = str[++n];
                 if (printMode) {
@@ -253,7 +353,6 @@ int print(std::string str, int x, int y, uint8_t c) {
                     else if (turnOffModeChar == 't') {
                         printMode &= ~(PRINT_MODE_TALL);
                         charHeight = 6;
-                        lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
                     }
                     else if (turnOffModeChar == '=') {
                         printMode &= ~(PRINT_MODE_STRIPEY);
@@ -264,7 +363,6 @@ int print(std::string str, int x, int y, uint8_t c) {
                         printMode &= ~(PRINT_MODE_STRIPEY);
                         charWidth = 4;
                         charHeight = 6;
-                        lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
                     }
                     else if (turnOffModeChar == 'i') {
                         printMode &= ~(PRINT_MODE_INVERTED);
@@ -277,17 +375,83 @@ int print(std::string str, int x, int y, uint8_t c) {
                     }
                 }
             }
+            else if (commandChar == '!'){
+                //no wraping after this print call (may be pico 8 bug?)
+                cancelWrap = true;
 
+                std::string addrHexStr = str.substr(n+1, 4);
+                n+=4;
+                int addr = (int)strtol(addrHexStr.c_str(), NULL, 16);
+
+                int size = length - n;
+                std::string binStr = str.substr(n + 1, size);
+                n+=size;
+
+                for(size_t i = 0; i < size; i++) {
+                    _ph_mem->data[addr + i] = binStr[i];
+                }
+            }
+            else if (commandChar == '@'){
+                std::string addrHexStr = str.substr(n+1, 4);
+                n+=4;
+                int addr = (int)strtol(addrHexStr.c_str(), NULL, 16);
+
+                std::string sizeHexStr = str.substr(n+1, 4);
+                n+=4;
+
+                int size = (int)strtol(sizeHexStr.c_str(), NULL, 16);
+
+                std::string binStr = str.substr(n + 1, size);
+                n+= size;
+
+                for(size_t i = 0; i < size; i++) {
+                    _ph_mem->data[addr + i] = binStr[i];
+                }
+            }
 		}
-		else if (ch == 12) { //"\f{p0}" draw text with this foreground color
+		else if (ch == 7) { // "\a" audio command
+            uint8_t nextChar = str[++n];
+            int audioStrIdx = 0;
+            while (nextChar != 32 && n < length) {
+                audioStrBytes[audioStrIdx++] = nextChar;
+                nextChar = str[++n];
+            }
+            //todo: generate audio stuff and play
+        }
+        else if (ch == 11) { // "\v" decorate previous character
+            uint8_t offsetChar = str[++n];
+			uint8_t toPrint = str[++n];
+            int offset = p0CharToNum(offsetChar);
+
+            int xOffset = (offset%4)-2;
+            int yOffset = (offset/4)-8;
+
+            _ph_graphics->drawCharacter(
+                toPrint,
+                prevX + xOffset,
+                prevY + yOffset,
+                drawPal[fgColor & 0x0f],
+                drawPal[bgColor & 0x0f],
+                printMode,
+                forceCharWidth,
+                forceCharHeight);
+        }
+        else if (ch == 12) { //"\f{p0}" draw text with this foreground color
 			uint8_t fgColChar = str[++n];
-			uint8_t fgCol = p0CharToNum(fgColChar);
-			_ph_graphics->color(fgCol);
-			_ph_mem->drawState.drawPaletteMap[7] = _ph_graphics->getDrawPalMappedColor(fgCol);
+			fgColor = p0CharToNum(fgColChar);
+			_ph_graphics->color(fgColor);
+		}
+        else if (ch == 14) { //"\014" Turn on custom font stored at 0x5600
+            printMode |= PRINT_MODE_CUSTOM_FONT;
+		}
+        else if (ch == 15) { //"\015" Turn off custom font stored at 0x5600
+            printMode &= ~(PRINT_MODE_CUSTOM_FONT);
 		}
 		else if (ch == '\n') {
-			x = _ph_mem->drawState.text_x;
+			x = homeX;
+            lineHeight = lineHeight > 0 ? lineHeight : 6;
 			y += lineHeight;
+            lineHeight = 0;
 		}
 		else if (ch == '\t') {
 			while (x % (tabStopWidth*4) > 0) {
@@ -298,10 +462,27 @@ int print(std::string str, int x, int y, uint8_t c) {
 			x -= charWidth;
 		}
 		else if (ch == '\r') {
-			x = _ph_mem->drawState.text_x;
+			x = homeX;
 		}
 		else if (ch >= 0x10) {
-			x += charWidth + _ph_graphics->drawCharacter(ch, x, y, printMode);
+            lineHeight = charHeight > lineHeight ? charHeight : lineHeight;
+            if (bgColor != 0) {
+                uint8_t prevPenColor = _ph_mem->drawState.color;
+                _ph_graphics->rectfill(x-1, y-1, x + charWidth-1, y + lineHeight-1, bgColor);
+                _ph_mem->drawState.color = prevPenColor;
+            }
+            prevX = x;
+            prevY = y;
+			x += charWidth + _ph_graphics->drawCharacter(
+                ch,
+                x,
+                y,
+                drawPal[fgColor & 0x0f],
+                drawPal[bgColor & 0x0f],
+                printMode,
+                forceCharWidth,
+                forceCharHeight);
+
             while (framesToPause > 0){
                 _ph_vm->vm_flip();
 
@@ -311,17 +492,16 @@ int print(std::string str, int x, int y, uint8_t c) {
 
         //soft wrap if enabled
         if (rhsWrap > 0 && x >= rhsWrap) {
-            x = _ph_mem->drawState.text_x;
+            x = homeX;
+            lineHeight = lineHeight > 0 ? lineHeight : 6;
 			y += lineHeight;
+            lineHeight = 0;
         }
 	}
 
-	for(int i = 0; i < 16; i++) {
-		_ph_mem->drawState.drawPaletteMap[i] = prevDrawPal[i];
-	}
-
+    lineHeight = lineHeight > 0 ? lineHeight : cancelWrap ? 0 : 6;
 	//todo: auto scrolling
-	_ph_mem->drawState.text_y += lineHeight;
+	_ph_mem->drawState.text_y = y + lineHeight;
 
 	return x;
 }

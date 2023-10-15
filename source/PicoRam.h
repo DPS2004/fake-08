@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring> 
 #include <string>
 
@@ -130,17 +131,43 @@ struct musicChannel {
 	uint8_t length = 0;
 };
 
-struct sfxChannel {
-    int16_t sfxId = -1;
-    float offset = 0;
+struct noteChannel {
     float phi = 0;
-    bool can_loop = true;
-    bool is_music = false;
-    int8_t prev_key = 0;
-    float prev_vol = 0;
+    note n;
 };
 
-struct audioState {
+struct rawSfxChannel {
+    int16_t sfxId = -1;
+    float offset = 0;
+    bool can_loop = true;
+    bool is_music = false;
+    noteChannel current_note;
+    noteChannel prev_note;
+    virtual rawSfxChannel *getChildChannel() {
+      return NULL;
+    }
+    virtual rawSfxChannel *getPrevChildChannel() {
+      return NULL;
+    }
+    virtual void rotateChannels() {
+    }
+};
+
+struct sfxChannel : rawSfxChannel {
+    rawSfxChannel customInstrumentChannel;
+    rawSfxChannel prevInstrumentChannel;
+    virtual rawSfxChannel *getChildChannel() {
+      return &(this->customInstrumentChannel);
+    }
+    virtual rawSfxChannel *getPrevChildChannel() {
+      return &(this->prevInstrumentChannel);
+    }
+    virtual void rotateChannels() {
+      prevInstrumentChannel = customInstrumentChannel;
+    }
+};
+
+struct audioState_t {
     musicChannel _musicChannel;
     sfxChannel _sfxChannels[4];
 };
@@ -250,7 +277,7 @@ struct PicoRam
     void Reset() {
         memset(data, 0, 0x4300);
         //leave general use memory
-        memset(data + 0x5600, 0, 0x10000 - 0x5600);
+        memset(data + 0x5f00, 0, 0x8000 - 0x5f00);
         //colorBitmask starts at 255
         hwState.colorBitmask = 0xff;
         hwState.spriteSheetMemMapping = 0x00;

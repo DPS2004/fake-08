@@ -87,6 +87,9 @@ uint32_t _mapped32BitColors[144];
 void postFlipFunction(){
     // We're done rendering, so we end the frame here.
 
+    //Fill whole window with black. Avoid double buffering flicker
+    SDL_FillRect(window, 0, 0);
+
     SDL_SoftStretch(texture, &SrcR, window, &DestR);
 
     SDL_Flip(window);
@@ -144,8 +147,13 @@ void audioSetup(){
 }
 
 void _setSourceRect(int xoffset, int yoffset) {
-    SrcR.x = xoffset;
-    SrcR.y = yoffset;
+    //miyoo mini has an upside down screen, so the texture is flipped and we need to offset these values
+    int scalexoffset = drawModeScaleX == 2 ? 64 : 0;
+    int scaleyoffset = drawModeScaleY == 2 ? 64 : 0;
+
+    SrcR.x = xoffset + scalexoffset;
+    SrcR.y = yoffset + scaleyoffset;
+
     SrcR.w = PicoScreenWidth / drawModeScaleX - (xoffset * 2);
     SrcR.h = PicoScreenHeight / drawModeScaleY - (yoffset * 2);
 }
@@ -239,7 +247,7 @@ void Host::oneTimeSetup(Audio* audio){
     SDL_WM_SetCaption("FAKE-08", NULL);
     SDL_ShowCursor(SDL_DISABLE);
 
-    int flags = SDL_SWSURFACE;
+    int flags = SDL_SWSURFACE | SDL_DOUBLEBUF;
 
     window = SDL_SetVideoMode(SCREEN_SIZE_X, SCREEN_SIZE_Y, SCREEN_BPP, flags);
 

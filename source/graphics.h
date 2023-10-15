@@ -9,6 +9,7 @@ using namespace z8;
 
 
 class Graphics {
+	//deprecated
 	uint8_t fontSpriteData[128 * 64];
 
 	PicoRam* _memory;
@@ -109,7 +110,25 @@ class Graphics {
 
 	fix32 fillp(fix32 pat);
 
-	int drawCharacter(uint8_t ch, int x, int y, uint8_t printMode = 0);
+	int drawCharacter(
+		uint8_t ch,
+		int x,
+		int y,
+		uint8_t fgColor,
+		uint8_t bgColor,
+		uint8_t printMode = 0,
+		int forceCharWidth = -1,
+		int forceCharHeight = -1);
+		
+	std::tuple<int, int> drawCharacterFromBytes(
+		uint8_t chBytes[],
+		int x,
+		int y,
+		uint8_t fgColor,
+		uint8_t bgColor,
+		uint8_t printMode,
+		uint8_t charWidth,
+		uint8_t charHeight);
 
 	void spr(
 		int n,
@@ -153,6 +172,7 @@ class Graphics {
 	void map(int celx, int cely, int sx, int sy, int celw, int celh, uint8_t layer);
 
 	void pal();
+	void pal(uint8_t p);
 	uint8_t pal(uint8_t c0, uint8_t c1, uint8_t p);
 	void palt();
 	bool palt(uint8_t c0, bool t);

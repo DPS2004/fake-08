@@ -118,10 +118,6 @@ bool abortLua;
 bool Vm::loadCart(Cart* cart) {
     _picoFrameCount = 0;
 
-    if (_cartdataKey.length() > 0) {
-        _host->saveCartData(_cartdataKey, getSerializedCartData());
-    }
-
     _cartdataKey = "";
 
     //reset memory (may have to be more selective about zeroing out to be accurate?)
@@ -257,6 +253,7 @@ bool Vm::loadCart(Cart* cart) {
     lua_register(_luaState, "_update_buttons", _update_buttons);
     lua_register(_luaState, "run", run);
     lua_register(_luaState, "extcmd", extcmd);
+    lua_register(_luaState, "_set_fps", setFps);
 
     //rng
     lua_register(_luaState, "rnd", rnd);
@@ -277,6 +274,20 @@ bool Vm::loadCart(Cart* cart) {
         return false;
     }
 
+    // Push the eris.init_persist_all function on the top of the lua stack (or nil if it doesn't exist)
+    // we call this function to establish the default global state of things not to save in the save state
+    // needs to be called after globals are loaded but before the cart is run, or _init is called
+    lua_getglobal(_luaState, "eris");
+	lua_getfield(_luaState, -1, "init_persist_all");
+
+    if (lua_pcall(_luaState, 0, 0, 0)){
+        Logger_Write("Error setting up lua persistence: %s\n", lua_tostring(_luaState, -1));
+        lua_pop(_luaState, 1);
+        return false;
+    }
+
+    //pop the eris.init_persist_all fuction off the stack now that we're done with it
+    lua_pop(_luaState, 1);
 
     int loadedCart = luaL_loadstring(_luaState, cart->LuaString.c_str());
     if (loadedCart != LUA_OK) {
@@ -336,6 +347,8 @@ bool Vm::loadCart(Cart* cart) {
     //pop the _init fuction off the stack now that we're done with it
     lua_pop(_luaState, 0);
 
+
+
     //check for update, mark correct target fps
     lua_getglobal(_luaState, "_update60");
     if (lua_isfunction(_luaState, -1)) {
@@ -394,7 +407,7 @@ void Vm::LoadSettingsCart(){
     }
 }
 
-void Vm::LoadCart(std::string filename){
+void Vm::LoadCart(std::string filename, bool loadBiosOnFail){
     if (filename == "__FAKE08-BIOS.p8") {
         LoadBiosCart();
         return;
@@ -414,7 +427,25 @@ void Vm::LoadCart(std::string filename){
 
     bool success = loadCart(cart);
 
-    if (!success) {
+    if (loadBiosOnFail && !success) {
+        CloseCart();
+        //todo: show an error message on the bios?
+        LoadBiosCart();
+    }
+}
+
+void Vm::LoadCart(const unsigned char* cartData, size_t size, bool loadBiosOnFail){
+    Logger_Write("Loading cart from memory\n");
+    CloseCart();
+
+    Logger_Write("Calling Cart Constructor\n");
+    Cart *cart = new Cart(cartData, size);
+
+    _cartLoadError = cart->LoadError;
+
+    bool success = loadCart(cart);
+
+    if (loadBiosOnFail && !success) {
         CloseCart();
         //todo: show an error message on the bios?
         LoadBiosCart();
@@ -422,7 +453,8 @@ void Vm::LoadCart(std::string filename){
 }
 
 void Vm::togglePauseMenu(){
-    if (_memory->drawState.suppressPause) {
+    _input->SetState(0, 0);
+    if (_memory->drawState.suppressPause) {    
         _memory->drawState.suppressPause = 0;
         return;
     }
@@ -453,6 +485,7 @@ std::vector<uint8_t> HexToBytes(std::string hex) {
   std::vector<uint8_t> bytes;
 
   hex.erase(std::remove(hex.begin(), hex.end(), '\n'), hex.end());
+  hex.erase(std::remove(hex.begin(), hex.end(), '\r'), hex.end());
 
   for (unsigned int i = 0; i < hex.length(); i += 2) {
     std::string byteString = hex.substr(i, 2);
@@ -503,7 +536,6 @@ void Vm::deserializeCartDataToMemory(std::string cartDataStr) {
             _memory->data[0x5e00 + idxStart + 3] = bytesVector[idxEnd - 3];
         }
     }
-
 }
 
 void Vm::UpdateAndDraw() {
@@ -511,13 +543,14 @@ void Vm::UpdateAndDraw() {
 
     _picoFrameCount++;
 
-    if (_input->btnp(6)) {
-        togglePauseMenu();
-    }
-
     if (_cartChangeQueued) {
         _prevCartKey = CurrentCartFilename();
-        LoadCart(_nextCartKey);
+        if (_nextCartSize > 0){
+            LoadCart(_nextCartData, _nextCartSize);
+        }
+        else {
+            LoadCart(_nextCartKey);
+        }
     }
 
     if (_pauseMenu){
@@ -534,8 +567,14 @@ void Vm::UpdateAndDraw() {
         // Push the _update function on the top of the lua stack
         if (_targetFps == 60) {
             lua_getglobal(_luaState, "_update60");
+            if (!lua_isfunction(_luaState, -1)) {
+                lua_getglobal(_luaState, "_update");
+            }
         } else {
             lua_getglobal(_luaState, "_update");
+            if (!lua_isfunction(_luaState, -1)) {
+                lua_getglobal(_luaState, "_update60");
+            }
         }
 
         if (lua_isfunction(_luaState, -1)) {
@@ -561,6 +600,10 @@ void Vm::UpdateAndDraw() {
             }
         }
         lua_pop(_luaState, 0);
+
+        if (_input->btnp(6)) {
+            togglePauseMenu();
+        }
     }
 
 }
@@ -590,6 +633,11 @@ void Vm::CloseCart() {
         _luaState = nullptr;
     }
 
+    Logger_Write("writing cart data\n");
+    if (_cartdataKey.length() > 0) {
+        _host->saveCartData(_cartdataKey, getSerializedCartData());
+    }
+
     Logger_Write("resetting state\n");
     _targetFps = 30;
     _picoFrameCount = 0;
@@ -597,6 +645,16 @@ void Vm::CloseCart() {
 
 void Vm::QueueCartChange(std::string filename){
     _nextCartKey = filename;
+    _nextCartData = nullptr;
+    _nextCartSize = 0;
+    _cartChangeQueued = true;
+    _pauseMenu = false;
+}
+
+void Vm::QueueCartChange(const unsigned char* cartData, size_t size){
+    _nextCartKey = "";
+    _nextCartData = cartData;
+    _nextCartSize = size;
     _cartChangeQueued = true;
     _pauseMenu = false;
 }
@@ -1007,6 +1065,10 @@ void Vm::vm_reset(){
     _graphics->pal();
 }
 
+void Vm::setTargetFps(int targetFps){
+    _targetFps = targetFps;
+}
+
 int Vm::getFps(){
     //TODO: return actual fps (as fix32?)
     return _targetFps;
@@ -1126,3 +1188,36 @@ std::string Vm::getLuaLine(string filename, int linenumber) {
     return line;
     
 }
+
+
+size_t Vm::serializeLuaState(char* dest) {
+    lua_getglobal(_luaState, "eris");
+	lua_getfield(_luaState, -1, "persist_all");
+
+	if (lua_pcall(_luaState, 0, 1, 0) != 0) {
+		std::string e = lua_tostring(_luaState, -1);
+		lua_pop(_luaState, 1);
+		return 0;
+	}
+
+	size_t len;
+	const char* result = lua_tolstring(_luaState, -1, &len);
+    memcpy(dest, result, len);
+	lua_pop(_luaState, 2);
+
+    return len;
+}
+
+void Vm::deserializeLuaState(const char* src, size_t len) {
+    lua_getglobal(_luaState, "eris");
+	lua_getfield(_luaState, -1, "restore_all");
+	lua_pushlstring(_luaState, src, len);
+
+	if (lua_pcall(_luaState, 1, 0, 0) != 0) {
+		std::string e = lua_tostring(_luaState, -1);
+		lua_pop(_luaState, 1);
+		return;
+	}
+	lua_pop(_luaState, 1);
+}
+

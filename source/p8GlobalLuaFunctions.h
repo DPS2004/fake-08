@@ -11,6 +11,9 @@ const char * p8GlobalLuaFunctions = R"#(
 --Table Helpers
 ---------------------------------
 
+--string indexing: https://lua-users.org/wiki/StringIndexing
+getmetatable('').__index = function(str,i) return string.sub(str,i,i) end
+
 --from zepto 8 bios.p8
 -- PicoLove functions did not return values added/deleted
 
@@ -36,12 +39,19 @@ end
 -- from returning #c in cases where the table is no longer an array. See
 -- the tables.p8 unit test cart for more details.
 --
+-- count() takes an optional value as its second argument, if this is present
+-- then count() will return the number of times the value is found in the table.
+--
 -- We also try to mimic the PICO-8 error messages:
 --  count(nil) → attempt to get length of local 'c' (a nil value)
 --  count("x") → attempt to index local 'c' (a string value)
-function count(c)
+function count(c,v)
     local cnt,max = 0,#c
-    for i=1,max do if (c[i] != nil) cnt+=1 end
+    if v == nil then
+        for i=1,max do if (c[i] != nil) cnt+=1 end
+    else
+        for i=1,max do if (c[i] == v) cnt+=1 end
+    end
     return cnt
 end
 
@@ -273,6 +283,53 @@ poke4, memcpy, memset, max, min, mid, flr,
 ceil, cos, sin, atan2, rnd, srand, band,
 bor, bxor, bnot, shl, shr, lshr, rotl, rotr
 
+--save state code modified from ps4-p8
+//https://github.com/voliva/ps4-p8/blob/ecba7f93ef9ba73ccb121b45ede6f46e651cef65/pico8_ps4/lua_lang_fns.cpp
+//MIT license
+
+eris.perm = {}
+eris.unperm = {}
+eris.original_G = {}
+
+eris.init_persist_all = function()
+  -- lua pairs is not sorted. The order is actually random, changes on every execution (wtf?)
+  
+  eris.settings("path", true)
+  
+  local keyset={}
+  local n=0
+  for k,v in pairs(_G) do
+    n=n+1
+    keyset[n]=k
+  end
+  table.sort(keyset)
+  local i=0
+  for i=1,n do
+    local k=keyset[i]
+    local v=_G[k]
+    eris.perm[v] = i
+    eris.unperm[i] = v
+    eris.original_G[k] = v
+  end
+end
+
+eris.persist_all = function()
+  local new_symbols = {}
+  for k,v in pairs(_G) do
+    if eris.original_G[k] != v then
+       new_symbols[k] = v
+    end
+  end
+
+  return eris.persist(eris.perm, new_symbols)
+end
+
+eris.restore_all = function(persisted)
+  local new_symbols = eris.unpersist(eris.unperm, persisted)
+  for k,v in pairs(new_symbols) do
+    _G[k] = v
+  end
+end
 )#";
 
 
