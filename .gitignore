@@ -51,3 +51,4 @@ platform/libretro/fake08_libretro.dylib
 platform/libretro/libs/
 platform/libretro/obj/
 .DS_Store
+platform/windows/SDL2.dll
